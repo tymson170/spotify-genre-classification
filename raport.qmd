@@ -1,0 +1,138 @@
+---
+title: "Projekt klasyfikacji gatunku muzyki"
+format: html
+editor: visual
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+```
+
+# Przygotowanie zbioru
+
+## Wstępne uporządkowanie zbioru
+
+### Wczytanie zbioru
+
+```{r}
+file <- read.csv(file = "spotify-genres-classification.csv")
+head(file)
+```
+
+### Usunięcie niepotrzebnych kolumn
+
+```{r}
+df <- file %>% 
+  select(-c("X", "playlist_id", "playlist_img", "playlist_owner_name", "playlist_owner_id", "track.id", "analysis_url", "added_at", "is_local", "primary_color", "added_by.href", "added_by.id", "added_by.type", "added_by.uri", "added_by.external_urls.spotify", "track.disc_number", "track.episode", "track.href", "track.is_local", "track.preview_url", "track.track", "track.track_number", "track.type", "track.uri", "track.album.album_type", "track.album.href", "track.album.id", "track.album.name", "track.album.total_tracks", "track.album.type", "track.album.uri", "track.album.external_urls.spotify", "track.external_ids.isrc", "track.external_urls.spotify", "video_thumbnail.url", "track.album.release_date_precision"))
+
+colnames(df)
+```
+
+Zostawiłem kolumnę odpowiadającą nazwie piosenki w celu łatwiejszej identyfikacji błędów napotkanych podczas wstępnego przygotowywania kolumn.
+
+### Dodanie kolumny odpowiadającej gatunkowi utworu
+
+```{r}
+table(df$playlist_name)
+```
+
+```{r}
+df$genre <- "NA"
+
+metal_playlists <- c("00s Metal Classics", "10s Metal Classics", "Metal Essentials")
+newage_playlists <- c("1980s New Age Classics", "Early New Age", "New Age Classics")
+rock_playlists <- c("All New Rock", "Rock Classics")
+blues_playlists <- c("Blues Classics", "Blues Standards", "Classic Blues Guitar", "Electric Blues Classics")
+classical_playlists <- c("Classical Essentials", "Classical New Releases")
+country_playlists <- c("Country's Greatest Hits", "Country Top 50", "Hot Country")
+folk_playlists <- c("Fresh Folk", "Roots Rising")
+jazz_playlists <- c("Jazz Classics")
+reggae_playlists <- c("One Love", "Reggae Classics", "Summer Sunshine Reggae")
+
+df[df$playlist_name %in% metal_playlists,]$genre <- "metal" 
+df[df$playlist_name %in% newage_playlists,]$genre <- "newage" 
+df[df$playlist_name %in% rock_playlists,]$genre <- "rock" 
+df[df$playlist_name %in% blues_playlists,]$genre <- "blues" 
+df[df$playlist_name %in% classical_playlists,]$genre <- "classical" 
+df[df$playlist_name %in% country_playlists,]$genre <- "country" 
+df[df$playlist_name %in% folk_playlists,]$genre <- "folk" 
+df[df$playlist_name %in% jazz_playlists,]$genre <- "jazz" 
+df[df$playlist_name %in% reggae_playlists,]$genre <- "reggae" 
+
+table(df$genre)
+```
+
+Usuwam kolumnę `playlist_name` bo nie jest już potrzebna.
+
+```{r}
+df <- df %>% 
+  select(-playlist_name)
+```
+
+### Sprawdzenie obecności wartości brakujących
+
+```{r}
+any(is.na(df))
+```
+
+### Sprawdzenie poprawności typów danych
+
+```{r}
+str(df)
+```
+
+### Zebranie metrum muzycznego innego niż 3/4, 4/4 i 5/4 w kategorię `inne`
+
+```{r}
+table(df$time_signature)
+```
+
+```{r}
+df[df$time_signature == 0,]$track.name
+```
+
+```{r}
+df[df$time_signature == 1, ]$track.name[33]
+```
+
+```{r}
+df$time_signature <- as.character(df$time_signature)
+df$time_signature <- ifelse(df$time_signature %in% c("3", "4", "5"),
+                            df$time_signature, 
+                            "other")
+table(df$time_signature)
+```
+
+### Wyciągnięcie z kolumny `track.album.release_date` samego roku
+
+```{r}
+df$track.album.release_date <- substr(df$track.album.release_date, 1, 4)
+colnames(df)[17] <- "release_year"
+df$release_year <- as.integer(df$release_year)
+head(df$release_year)
+table(df$release_year)
+```
+
+### Zmiana wartości w kolumnie `track.explicit` na 0 i 1
+
+```{r}
+df$track.explicit <- ifelse(df$track.explicit == TRUE, 1, 0)
+table(df$track.explicit)
+```
+
+## Kodowanie zmiennych kategorialnych
+
+```{r}
+table(df$key)
+```
+
+```{r}
+df$key <- factor(df$key, levels = 0:11, labels = 0:11)
+df$mode <- factor(df$mode, levels = c(0, 1), labels = c(0, 1))
+df$time_signature <- factor(df$time_signature, levels = c("3", "4", "5", "other"), labels = c("3/4", "4/4", "5/4", "other"))
+df$track.explicit <- factor(df$track.explicit, levels = c(0, 1), labels = c(0, 1))
+
+```
