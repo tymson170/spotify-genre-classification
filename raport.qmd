@@ -134,5 +134,23 @@ df$key <- factor(df$key, levels = 0:11, labels = 0:11)
 df$mode <- factor(df$mode, levels = c(0, 1), labels = c(0, 1))
 df$time_signature <- factor(df$time_signature, levels = c("3", "4", "5", "other"), labels = c("3/4", "4/4", "5/4", "other"))
 df$track.explicit <- factor(df$track.explicit, levels = c(0, 1), labels = c(0, 1))
+```
+
+#### Usunięcie nadmiarowej zmiennej `key_mode`
+
+```{r}
+df <- df %>% 
+  select(-key_mode)
+```
+
+```{r}
+df$key_name <- factor(df$key_name)
+df$mode_name <- factor(df$mode_name)
+df$genre <- factor(df$genre)
+```
+
+### Zmiana zmiennej `release_year` na zmienną `decade`
+
+```{r}
 
 ```
