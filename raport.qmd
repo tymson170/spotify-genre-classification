@@ -152,5 +152,14 @@ df$genre <- factor(df$genre)
 ### Zmiana zmiennej `release_year` na zmienną `decade`
 
 ```{r}
+df$decade <- (df$release_year - df$release_year %% 10) %% 100
+table(df$decade)
+df[df$decade %in% c(30, 40, 50), ]$decade <- "<60"
+df[df$decade == 0, ]$decade <- "00"
+df$decade <- as.character(df$decade)
+df$decade <- factor(df$decade)
+str(df$decade)
 
+df <- df %>% 
+  select(-release_year)
 ```
