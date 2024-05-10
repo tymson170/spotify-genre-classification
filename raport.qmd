@@ -4,6 +4,8 @@ format: html
 editor: visual
 editor_options: 
   chunk_output_type: console
+execute: 
+  echo: false
 ---
 
 ```{r}
@@ -84,6 +86,15 @@ any(is.na(df))
 str(df)
 ```
 
+### Identyfikacja duplikatów
+
+```{r}
+duplicated(df$track.name) %>% table()
+df <- df %>% 
+  distinct(track.name, .keep_all = TRUE)
+duplicated(df$track.name) %>% table()
+```
+
 ### Zebranie metrum muzycznego innego niż 3/4, 4/4 i 5/4 w kategorię `inne`
 
 ```{r}
@@ -157,9 +168,110 @@ table(df$decade)
 df[df$decade %in% c(30, 40, 50), ]$decade <- "<60"
 df[df$decade == 0, ]$decade <- "00"
 df$decade <- as.character(df$decade)
-df$decade <- factor(df$decade)
+df$decade <- factor(df$decade, levels = c("<60", "60", "70", "80", "90", "00", "10", "20"))
 str(df$decade)
 
 df <- df %>% 
   select(-release_year)
+```
+
+### Zmiana jednostki w zmiennej `track.duration_ms` na sekundy
+
+```{r}
+df$track.duration_s <- df$track.duration_ms / 1000
+df <- df %>% 
+  select(-track.duration_ms)
+```
+
+# Wizualizacja
+
+### Dekada w zależności od gatunku
+
+```{r}
+genres <- as.character(unique(df$genre))
+```
+
+::: panel-tabset
+##### `r genres[1]`
+
+```{r}
+ggplot(df[df$genre == genres[1], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[1], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
+```
+
+##### `r genres[2]`
+
+```{r}
+ggplot(df[df$genre == genres[2], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[2], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
+```
+
+##### `r genres[3]`
+
+```{r}
+ggplot(df[df$genre == genres[3], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[3], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
+```
+
+##### `r genres[4]`
+
+```{r}
+ggplot(df[df$genre == genres[4], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[4], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
+```
+
+##### `r genres[5]`
+
+```{r}
+ggplot(df[df$genre == genres[5], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[5], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
+```
+
+##### `r genres[6]`
+
+```{r}
+ggplot(df[df$genre == genres[6], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[6], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
+```
+
+##### `r genres[7]`
+
+```{r}
+ggplot(df[df$genre == genres[7], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[7], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
+```
+
+##### `r genres[8]`
+
+```{r}
+ggplot(df[df$genre == genres[8], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[8], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
+```
+
+##### `r genres[9]`
+
+```{r}
+ggplot(df[df$genre == genres[9], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[9], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
+```
+:::
+
+### Treści wulgarne w zależności od gatunku
+
+```{r}
+df %>% 
+  filter(track.explicit == 1) %>% 
+  group_by(genre) %>% 
+  summarise(sum_explicit = sum(as.numeric(track.explicit))) %>% 
+  ggplot(aes(x = reorder(genre, -sum_explicit), y = sum_explicit)) + geom_bar(stat = "identity", fill = "#F8766D") + xlab("genre") + ylab("count")
+```
+
+### Boxploty długości piosenek
+
+```{r}
+ggplot(df, aes(y = track.duration_s/60, x = genre, fill = genre)) + geom_boxplot() + theme(legend.position = "") + ylab("Track length (minutes)")
+```
+
+### Popularność gatunków
+
+```{r}
+ggplot(df, aes(y = track.popularity, x = genre, fill = genre)) + geom_boxplot()
+```
+
+```{r}
+df %>% 
+  select(track.popularity, track.name) %>% 
+  arrange(-track.popularity) %>% 
+  head()
 ```
