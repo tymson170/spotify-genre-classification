@@ -4,13 +4,20 @@ format: html
 editor: visual
 editor_options: 
   chunk_output_type: console
-execute: 
-  echo: false
 ---
 
 ```{r}
 library(tidyverse)
 library(ggplot2)
+library(PerformanceAnalytics)
+library(corrplot)
+library(psych)
+library(hrbrthemes)
+library(agricolae)
+library(FSA)
+library(rstatix)
+library(ggpubr)
+
 ```
 
 # Przygotowanie zbioru
@@ -20,7 +27,7 @@ library(ggplot2)
 ### Wczytanie zbioru
 
 ```{r}
-file <- read.csv(file = "spotify-genres-classification.csv")
+file <- read.csv("spotify-genres-classification-new.csv")
 head(file)
 ```
 
@@ -45,17 +52,17 @@ table(df$playlist_name)
 df$genre <- "NA"
 
 metal_playlists <- c("00s Metal Classics", "10s Metal Classics", "Metal Essentials")
-newage_playlists <- c("1980s New Age Classics", "Early New Age", "New Age Classics")
+hiphop_playlists <- c("Hip-Hop Drive", "Gold School", "RAP GENERACJA")
 rock_playlists <- c("All New Rock", "Rock Classics")
 blues_playlists <- c("Blues Classics", "Blues Standards", "Classic Blues Guitar", "Electric Blues Classics")
 classical_playlists <- c("Classical Essentials", "Classical New Releases")
 country_playlists <- c("Country's Greatest Hits", "Country Top 50", "Hot Country")
 folk_playlists <- c("Fresh Folk", "Roots Rising")
 jazz_playlists <- c("Jazz Classics")
-reggae_playlists <- c("One Love", "Reggae Classics", "Summer Sunshine Reggae")
+reggae_playlists <- c("Reggae Classics", "Summer Sunshine Reggae", "Reggae Party")
 
 df[df$playlist_name %in% metal_playlists,]$genre <- "metal" 
-df[df$playlist_name %in% newage_playlists,]$genre <- "newage" 
+df[df$playlist_name %in% hiphop_playlists,]$genre <- "hiphop" 
 df[df$playlist_name %in% rock_playlists,]$genre <- "rock" 
 df[df$playlist_name %in% blues_playlists,]$genre <- "blues" 
 df[df$playlist_name %in% classical_playlists,]$genre <- "classical" 
@@ -63,6 +70,9 @@ df[df$playlist_name %in% country_playlists,]$genre <- "country"
 df[df$playlist_name %in% folk_playlists,]$genre <- "folk" 
 df[df$playlist_name %in% jazz_playlists,]$genre <- "jazz" 
 df[df$playlist_name %in% reggae_playlists,]$genre <- "reggae" 
+
+df <- df %>% 
+  filter(genre != "NA")
 
 table(df$genre)
 ```
@@ -77,6 +87,9 @@ df <- df %>%
 ### Sprawdzenie obecności wartości brakujących
 
 ```{r}
+any(is.na(df))
+df[!complete.cases(df), ]
+df <- na.omit(df)
 any(is.na(df))
 ```
 
@@ -93,6 +106,15 @@ duplicated(df$track.name) %>% table()
 df <- df %>% 
   distinct(track.name, .keep_all = TRUE)
 duplicated(df$track.name) %>% table()
+```
+
+### Usunięcie wiersza z tempem = 0
+
+```{r}
+nrow(df)
+df <- df %>% 
+  filter(tempo != 0)
+nrow(df)
 ```
 
 ### Zebranie metrum muzycznego innego niż 3/4, 4/4 i 5/4 w kategorię `inne`
@@ -141,8 +163,8 @@ table(df$key)
 ```
 
 ```{r}
-df$key <- factor(df$key, levels = 0:11, labels = 0:11)
-df$mode <- factor(df$mode, levels = c(0, 1), labels = c(0, 1))
+df$key <- factor(df$key_name)
+df$mode <- factor(df$mode_name)
 df$time_signature <- factor(df$time_signature, levels = c("3", "4", "5", "other"), labels = c("3/4", "4/4", "5/4", "other"))
 df$track.explicit <- factor(df$track.explicit, levels = c(0, 1), labels = c(0, 1))
 ```
@@ -151,12 +173,10 @@ df$track.explicit <- factor(df$track.explicit, levels = c(0, 1), labels = c(0, 1
 
 ```{r}
 df <- df %>% 
-  select(-key_mode)
+  select(-c(key_mode, key_name, mode_name))
 ```
 
 ```{r}
-df$key_name <- factor(df$key_name)
-df$mode_name <- factor(df$mode_name)
 df$genre <- factor(df$genre)
 ```
 
@@ -165,10 +185,10 @@ df$genre <- factor(df$genre)
 ```{r}
 df$decade <- (df$release_year - df$release_year %% 10) %% 100
 table(df$decade)
-df[df$decade %in% c(30, 40, 50), ]$decade <- "<60"
+df[df$decade %in% c(30, 40, 50, 60), ]$decade <- "<70"
 df[df$decade == 0, ]$decade <- "00"
 df$decade <- as.character(df$decade)
-df$decade <- factor(df$decade, levels = c("<60", "60", "70", "80", "90", "00", "10", "20"))
+df$decade <- factor(df$decade, levels = c("<70", "70", "80", "90", "00", "10", "20"))
 str(df$decade)
 
 df <- df %>% 
@@ -185,6 +205,114 @@ df <- df %>%
 
 # Wizualizacja
 
+### Wykresy zmiennych
+
+::: panel-tabset
+#### Zmienne kategorialne
+
+::: panel-tabset
+##### Gatunek
+
+```{r}
+ggplot(df, aes(x = genre)) + geom_bar(fill = "#F8766D")
+```
+
+##### Skale
+
+```{r}
+ggplot(df, aes(x = key, fill = mode)) + geom_bar()
+```
+
+##### Metrum
+
+```{r}
+ggplot(df, aes(x = time_signature)) + geom_bar(fill = "#F8766D")
+```
+
+##### Wulgarność
+
+```{r}
+ggplot(df, aes(x = track.explicit)) + geom_bar(fill = "#F8766D")
+```
+
+##### Dekada
+
+```{r}
+ggplot(df, aes(x = decade)) + geom_bar(fill = "#F8766D")
+```
+:::
+
+#### Zmienne ciągłe
+
+::: panel-tabset
+##### Taneczność
+
+```{r}
+ggplot(df, aes(x = danceability)) + geom_histogram(bins = 30, fill = "#F8766D")
+```
+
+##### Energiczność
+
+```{r}
+ggplot(df, aes(x = energy)) + geom_histogram(bins = 30, fill = "#F8766D")
+```
+
+##### Głośność
+
+```{r}
+ggplot(df, aes(x = loudness)) + geom_histogram(bins = 30, fill = "#F8766D")
+```
+
+##### Recytowalność
+
+```{r}
+ggplot(df, aes(x = speechiness)) + geom_histogram(bins = 30, fill = "#F8766D")
+```
+
+##### Akustyczność
+
+```{r}
+ggplot(df, aes(x = acousticness)) + geom_histogram(bins = 30, fill = "#F8766D")
+```
+
+##### Instrumentalność
+
+```{r}
+ggplot(df, aes(x = instrumentalness)) + geom_histogram(bins = 30, fill = "#F8766D")
+```
+
+##### Wersja na żywo
+
+```{r}
+ggplot(df, aes(x = liveness)) + geom_histogram(bins = 30, fill = "#F8766D")
+```
+
+##### Pozytywność nastroju
+
+```{r}
+ggplot(df, aes(x = valence)) + geom_histogram(bins = 30, fill = "#F8766D")
+```
+
+##### Tempo
+
+```{r}
+ggplot(df, aes(x = tempo)) + geom_histogram(bins = 30, fill = "#F8766D")
+```
+
+##### Popularność
+
+```{r}
+ggplot(df, aes(x = track.popularity)) + geom_histogram(bins = 30, fill = "#F8766D")
+```
+
+##### Długość
+
+```{r}
+ggplot(df, aes(x = track.duration_s)) + geom_histogram(bins = 30, fill = "#F8766D")
+```
+:::
+:::
+
 ### Dekada w zależności od gatunku
 
 ```{r}
@@ -192,55 +320,55 @@ genres <- as.character(unique(df$genre))
 ```
 
 ::: panel-tabset
-##### `r genres[1]`
+##### Blues
 
 ```{r}
 ggplot(df[df$genre == genres[1], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[1], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
 ```
 
-##### `r genres[2]`
+##### Muzyka klasyczna
 
 ```{r}
 ggplot(df[df$genre == genres[2], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[2], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
 ```
 
-##### `r genres[3]`
+##### Country
 
 ```{r}
 ggplot(df[df$genre == genres[3], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[3], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
 ```
 
-##### `r genres[4]`
+##### Folk
 
 ```{r}
 ggplot(df[df$genre == genres[4], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[4], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
 ```
 
-##### `r genres[5]`
+##### Jazz
 
 ```{r}
 ggplot(df[df$genre == genres[5], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[5], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
 ```
 
-##### `r genres[6]`
+##### Hiphop
 
 ```{r}
 ggplot(df[df$genre == genres[6], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[6], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
 ```
 
-##### `r genres[7]`
+##### Reggae
 
 ```{r}
 ggplot(df[df$genre == genres[7], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[7], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
 ```
 
-##### `r genres[8]`
+##### Rock
 
 ```{r}
 ggplot(df[df$genre == genres[8], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[8], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
 ```
 
-##### `r genres[9]`
+##### Metal
 
 ```{r}
 ggplot(df[df$genre == genres[9], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[9], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
@@ -253,8 +381,10 @@ ggplot(df[df$genre == genres[9], ], aes(x = decade)) + geom_bar(fill = "#F8766D"
 df %>% 
   filter(track.explicit == 1) %>% 
   group_by(genre) %>% 
-  summarise(sum_explicit = sum(as.numeric(track.explicit))) %>% 
-  ggplot(aes(x = reorder(genre, -sum_explicit), y = sum_explicit)) + geom_bar(stat = "identity", fill = "#F8766D") + xlab("genre") + ylab("count")
+  summarise(n = n()) %>%
+  mutate(all = c(187, 226, 238, 248, 235, 247)) %>% 
+  ggplot(aes(x = reorder(genre, -n), y = n)) + geom_bar(stat = "identity", fill = "#F8766D") + xlab("genre") + ylab("count") + 
+geom_text(aes(label = paste0(round(n/all*100, 2), "%")), position = position_dodge(width = 0.9), vjust = -0.25)
 ```
 
 ### Boxploty długości piosenek
@@ -263,10 +393,34 @@ df %>%
 ggplot(df, aes(y = track.duration_s/60, x = genre, fill = genre)) + geom_boxplot() + theme(legend.position = "") + ylab("Track length (minutes)")
 ```
 
+```{r}
+df %>%
+group_by(genre) %>%
+summarise(rozmiar_próby=length(track.duration_s), p_wartość_Shapiro_Wilk=shapiro.test(track.duration_s)$p.value)
+```
+
+```{r}
+bartlett.test(df$track.duration_s, df$genre)
+```
+
+```{r}
+kruskal.test(track.duration_s ~ genre, df)
+```
+
+```{r}
+dunntest <- dunn_test(df, track.duration_s ~ genre, p.adjust.method = "bonferroni")
+View(dunntest)
+```
+
+```{r}
+dunntest <- dunntest %>% add_xy_position(x = "genre")
+ggboxplot(df, x = "genre", y = "track.duration_s", fill = "genre", legend = "") + stat_pvalue_manual(dunntest, hide.ns = TRUE, label = "{round(p.adj, 2)}") 
+```
+
 ### Popularność gatunków
 
 ```{r}
-ggplot(df, aes(y = track.popularity, x = genre, fill = genre)) + geom_boxplot()
+ggplot(df, aes(y = track.popularity, x = genre, fill = genre)) + geom_boxplot() 
 ```
 
 ```{r}
@@ -274,4 +428,33 @@ df %>%
   select(track.popularity, track.name) %>% 
   arrange(-track.popularity) %>% 
   head()
+```
+
+### Energy vs. loudness
+
+```{r}
+ggplot(df, aes(x = energy, y = loudness, colour = genre)) + geom_point()
+```
+
+### Danceability vs. valence
+
+```{r}
+ggplot(df, aes(x = danceability, y = valence, colour = genre)) + geom_point()
+```
+
+### Wykres korelacji
+
+```{r}
+df %>% 
+  select(where(is.numeric)) %>%
+  cor() %>% 
+  corPlot(cex = 0.5, xlas = 2)
+```
+
+```{r}
+ggplot(df, aes(x = energy, y = loudness)) + geom_point() + geom_smooth(method = "lm", formula = y ~ poly(x, 2))
+```
+
+```{r}
+ggplot(df, aes(x = genre, y = tempo)) + geom_boxplot()
 ```

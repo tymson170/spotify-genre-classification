@@ -11,8 +11,8 @@ playlist_names <- c(
   "Country's Greatest Hits", "Hot Country", "Country Top 50", 
   "Fresh Folk", "Roots Rising", 
   "jazz classics the best tunes in jazz history", 
-  "Early New Age", "New Age Classics", "1980s New Age Classics",
-  "Reggae Classics", "Summer Sunshine Reggae", "celebrating the film bob marley one love", 
+  "Hip-Hop Drive", "Gold School", "RAP GENERACJA",
+  "Reggae Classics", "Summer Sunshine Reggae", "celebrating the film bob marley one love", "Reggae Party", 
   "Rock Classics", "All New Rock",
   "Metal Essentials", "00s Metal Classics", "10s Metal Classics"
   )
@@ -60,7 +60,9 @@ df <- as.data.frame(dataset)
 
 df <- df[,-which(sapply(df, class) == "list")]
 
-write.csv(df, "spotify-genres-classification.csv")
+# write.csv(df, "spotify-genres-classification.csv")
+write.csv(df, "spotify-genres-classification-new.csv")
 
+View(df)
 
 
