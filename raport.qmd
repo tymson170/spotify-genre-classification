@@ -17,7 +17,7 @@ library(agricolae)
 library(FSA)
 library(rstatix)
 library(ggpubr)
-
+library(plotly)
 ```
 
 # Przygotowanie zbioru
@@ -442,6 +442,16 @@ ggplot(df, aes(x = energy, y = loudness, colour = genre)) + geom_point()
 ggplot(df, aes(x = danceability, y = valence, colour = genre)) + geom_point()
 ```
 
+### Głośność
+
+```{r}
+df %>% 
+  group_by(decade, genre) %>% 
+  summarise(loudness = mean(loudness)) %>% 
+  ungroup() %>% 
+  plot_ly(x = ~decade, y = ~loudness, color = ~genre, type = "scatter", mode = "lines")
+```
+
 ### Wykres korelacji
 
 ```{r}
@@ -453,8 +463,4 @@ df %>%
 
 ```{r}
 ggplot(df, aes(x = energy, y = loudness)) + geom_point() + geom_smooth(method = "lm", formula = y ~ poly(x, 2))
-```
-
-```{r}
-ggplot(df, aes(x = genre, y = tempo)) + geom_boxplot()
 ```
