@@ -449,7 +449,8 @@ df %>%
   group_by(decade, genre) %>% 
   summarise(loudness = mean(loudness)) %>% 
   ungroup() %>% 
-  plot_ly(x = ~decade, y = ~loudness, color = ~genre, type = "scatter", mode = "lines")
+  plot_ly(x = ~decade, y = ~loudness, color = ~genre, hovertext = ~loudness) %>% 
+  add_lines(hovertemplate = paste0("Average loudness: %{hovertext}"))
 ```
 
 ### Wykres korelacji
