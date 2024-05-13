@@ -409,7 +409,7 @@ kruskal.test(track.duration_s ~ genre, df)
 
 ```{r}
 dunntest <- dunn_test(df, track.duration_s ~ genre, p.adjust.method = "bonferroni")
-View(dunntest)
+dunntest
 ```
 
 ```{r}
@@ -447,7 +447,7 @@ ggplot(df, aes(x = danceability, y = valence, colour = genre)) + geom_point()
 ```{r}
 df %>% 
   group_by(decade, genre) %>% 
-  summarise(loudness = mean(loudness)) %>% 
+  summarise(loudness = round(mean(loudness), 2)) %>% 
   ungroup() %>% 
   plot_ly(x = ~decade, y = ~loudness, color = ~genre, hovertext = ~loudness) %>% 
   add_lines(hovertemplate = paste0("Average loudness: %{hovertext}"))
@@ -464,4 +464,15 @@ df %>%
 
 ```{r}
 ggplot(df, aes(x = energy, y = loudness)) + geom_point() + geom_smooth(method = "lm", formula = y ~ poly(x, 2))
+```
+
+### Zależność zmiennej `valence` od skali
+
+```{r}
+ggplot(df, aes(x = mode, y = valence)) + geom_boxplot()
+```
+
+```{r}
+ttest <- t.test(valence ~ mode, data = df)
+ttest
 ```
