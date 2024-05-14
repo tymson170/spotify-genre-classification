@@ -203,6 +203,15 @@ df <- df %>%
   select(-track.duration_ms)
 ```
 
+### Rezygnacja ze zmiennej `popularity`
+
+```{r}
+nrow(df[df$track.popularity == 0, ])
+
+df <- df %>% 
+  select(-track.popularity)
+```
+
 # Wizualizacja
 
 ### Wykresy zmiennych
@@ -297,12 +306,6 @@ ggplot(df, aes(x = valence)) + geom_histogram(bins = 30, fill = "#F8766D")
 
 ```{r}
 ggplot(df, aes(x = tempo)) + geom_histogram(bins = 30, fill = "#F8766D")
-```
-
-##### Popularność
-
-```{r}
-ggplot(df, aes(x = track.popularity)) + geom_histogram(bins = 30, fill = "#F8766D")
 ```
 
 ##### Długość
@@ -415,19 +418,6 @@ dunntest
 ```{r}
 dunntest <- dunntest %>% add_xy_position(x = "genre")
 ggboxplot(df, x = "genre", y = "track.duration_s", fill = "genre", legend = "") + stat_pvalue_manual(dunntest, hide.ns = TRUE, label = "{round(p.adj, 2)}") 
-```
-
-### Popularność gatunków
-
-```{r}
-ggplot(df, aes(y = track.popularity, x = genre, fill = genre)) + geom_boxplot() 
-```
-
-```{r}
-df %>% 
-  select(track.popularity, track.name) %>% 
-  arrange(-track.popularity) %>% 
-  head()
 ```
 
 ### Energy vs. loudness
