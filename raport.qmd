@@ -4,6 +4,8 @@ format: html
 editor: visual
 editor_options: 
   chunk_output_type: console
+execute: 
+  warning: false
 ---
 
 ```{r}
@@ -18,6 +20,16 @@ library(FSA)
 library(rstatix)
 library(ggpubr)
 library(plotly)
+library(tidymodels)
+library(recipes)
+library(rpart)
+library(dials)
+library(rules)
+library(baguette)
+library(parsnip)
+library(discrim)
+library(doParallel)
+library(sparsediscrim)
 ```
 
 # Przygotowanie zbioru
@@ -452,8 +464,40 @@ df %>%
   corPlot(cex = 0.5, xlas = 2)
 ```
 
+::: panel-tabset
+#### energy vs. loudness
+
 ```{r}
 ggplot(df, aes(x = energy, y = loudness)) + geom_point() + geom_smooth(method = "lm", formula = y ~ poly(x, 2))
+```
+
+#### energy vs. acousticness
+
+```{r}
+ggplot(df, aes(x = acousticness, y = energy)) + geom_point() + geom_smooth(method = "lm")
+```
+
+#### loudness vs. acousticness
+
+```{r}
+ggplot(df, aes(x = acousticness, y = loudness)) + geom_point() + geom_smooth(method = "lm", formula = y ~ poly(x, 2))
+```
+:::
+
+```{r}
+fig <- plot_ly(df, x = ~energy, y = ~loudness, z = ~acousticness, color = ~genre)
+fig <- fig %>% add_markers(size = 0.8)
+fig <- fig %>% layout(scene = list(xaxis = list(title = 'energy'),
+                     yaxis = list(title = 'loudness'),
+                     zaxis = list(title = 'acousticness')))
+fig
+```
+
+#### Porzucenie zmiennych `loudness` i `acousticness`
+
+```{r}
+df <- df %>% 
+  select(-c(loudness, acousticness))
 ```
 
 ### Zależność zmiennej `valence` od skali
@@ -465,4 +509,174 @@ ggplot(df, aes(x = mode, y = valence)) + geom_boxplot()
 ```{r}
 ttest <- t.test(valence ~ mode, data = df)
 ttest
+```
+
+# Modelowanko
+
+## Przygotowanie danych do dalszego procesu modelowania
+
+### Podział zbioru na treningowy i testowy
+
+```{r}
+set.seed(170)
+
+split <- initial_split(df, prop = 0.8, strata = genre)
+spotify_train <- training(split)
+spotify_test <- testing(split)
+split
+```
+
+### Przygotowanie 10-krotnej walidacji krzyżowej z 5-krotnym powtórzeniem
+
+```{r}
+spotify_folds <- vfold_cv(spotify_train, strata = genre)
+spotify_folds
+```
+
+### Przygotowanie odpowiednich receptur
+
+Modele i rekomendowany preprocessing:
+
+-   LDA - dummy, zv, decorrelate, transform
+
+-   regresja logistyczna - dummy, zv, decorrelate, transform
+
+-   mlp - dummy, zv, decorrelate, normalize, transform
+
+-   k-najbliższych sąsiadów - dummy, zv, decorrelate, normalize, transform
+
+-   las losowy - zv, decorrelate
+
+-   xgboost - zv, decorrelate, dummy
+
+-   svm - dummy, zv, decorrelate, normalize, transform
+
+```{r}
+basic_recipe <-
+  recipe(genre~., data = spotify_train) %>% 
+  update_role(track.name, new_role = "track_name") %>% 
+  step_zv(all_predictors())
+
+basic_recipe %>% summary()
+```
+
+```{r}
+dummy_recipe <- 
+  basic_recipe %>% 
+  step_dummy(all_nominal_predictors())
+```
+
+```{r}
+transform_recipe <-
+  dummy_recipe %>% 
+  step_YeoJohnson(all_numeric_predictors()) %>% 
+  step_normalize(all_numeric_predictors())
+```
+
+```{r}
+rf_spec <- rand_forest(mtry = tune(), min_n = tune(), trees = tune()) %>% 
+  set_engine("ranger") %>% 
+  set_mode("classification")
+
+bagging_spec <- bag_tree(min_n = tune(), tree_depth = tune()) %>% 
+  set_engine("rpart", times = 60L) %>% 
+  set_mode("classification")
+
+xgb_spec <- boost_tree(mtry = tune(), trees = tune(), min_n = tune(), tree_depth = tune(), learn_rate = tune(), loss_reduction = tune(), sample_size = tune()) %>% 
+  set_engine("xgboost") %>% 
+  set_mode("classification")
+  
+mlp_spec <- 
+  mlp(hidden_units = tune(), penalty = tune(), epochs = tune()) %>% 
+  set_engine("nnet", trace = 0) %>% 
+  set_mode("classification")
+
+nearest_spec <- nearest_neighbor(neighbors = tune(), weight_func = tune(), dist_power = tune()) %>% 
+  set_engine("kknn") %>% 
+  set_mode("classification")
+
+svm_spec <- svm_rbf(cost = tune(), rbf_sigma = tune()) %>%
+  set_engine("kernlab") %>% 
+  set_mode("classification")
+
+mars_spec <- mars(prod_degree = tune()) %>% 
+  set_engine("earth") %>% 
+  set_mode("classification")
+
+bayes_spec <- naive_Bayes(smoothness = tune(), Laplace = tune()) %>% 
+  set_engine("klaR") %>% 
+  set_mode("classification")
+```
+
+### Stworzenie zestawów przepływu pracy
+
+```{r}
+basic <- workflow_set(preproc = list(basic = basic_recipe), 
+                      models = list(random_forest = rf_spec, 
+                                    bagging = bagging_spec, 
+                                    naive_bayes = bayes_spec)
+    )
+```
+
+```{r}
+dummy <- workflow_set(preproc = list(dummy = dummy_recipe), 
+                      models = list(xbg = xgb_spec))
+```
+
+```{r}
+transform <- workflow_set(preproc = list(transform = transform_recipe), 
+                          models = list(mlp = mlp_spec, 
+                                        knn = nearest_spec, 
+                                        svm = svm_spec,
+                                        mars = mars_spec))
+
+```
+
+```{r}
+all_workflows <- bind_rows(basic, dummy, transform) %>% 
+  mutate(wflow_id = gsub("(basic_)|(dummy_)|(transform_)", "", wflow_id))
+all_workflows
+```
+
+### Inicjalizacja przetwarzania równoległego
+
+```{r}
+cl <- makePSOCKcluster(4)
+registerDoParallel(cl)
+```
+
+### Tuning modeli
+
+```{r}
+grid_ctrl <- 
+  control_grid(
+    save_pred = TRUE,
+    parallel_over = "everything",
+    save_workflow = TRUE)
+
+grid_results <- 
+ all_workflows %>% 
+ workflow_map(seed = 170, 
+              resamples = spotify_folds, 
+              grid = 25, 
+              control = grid_ctrl)
+
+stopCluster(cl)
+registerDoSEQ()
+
+grid_results %>% 
+   rank_results() %>% 
+   filter(.metric == "accuracy") %>% 
+   select(model, .config, acc = mean, rank)
+```
+
+```{r}
+autoplot(
+   grid_results,
+   rank_metric = "accuracy",
+   metric = "accuracy",
+   select_best = TRUE) + 
+geom_text(aes(y = mean - 0.03, label = wflow_id), angle = 90, hjust = 1) +
+lims(y = c(0.5, 0.8)) +
+theme(legend.position = "none")
 ```
