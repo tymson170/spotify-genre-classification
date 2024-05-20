@@ -599,10 +599,6 @@ svm_spec <- svm_rbf(cost = tune(), rbf_sigma = tune()) %>%
   set_engine("kernlab") %>% 
   set_mode("classification")
 
-mars_spec <- mars(prod_degree = tune()) %>% 
-  set_engine("earth") %>% 
-  set_mode("classification")
-
 bayes_spec <- naive_Bayes(smoothness = tune(), Laplace = tune()) %>% 
   set_engine("klaR") %>% 
   set_mode("classification")
@@ -614,27 +610,26 @@ bayes_spec <- naive_Bayes(smoothness = tune(), Laplace = tune()) %>%
 basic <- workflow_set(preproc = list(basic = basic_recipe), 
                       models = list(random_forest = rf_spec, 
                                     bagging = bagging_spec, 
-                                    naive_bayes = bayes_spec)
-    )
+                                    naive_bayes = bayes_spec))
 ```
 
 ```{r}
 dummy <- workflow_set(preproc = list(dummy = dummy_recipe), 
-                      models = list(xbg = xgb_spec))
+                      models = list(xgb = xgb_spec))
 ```
 
 ```{r}
 transform <- workflow_set(preproc = list(transform = transform_recipe), 
                           models = list(mlp = mlp_spec, 
                                         knn = nearest_spec, 
-                                        svm = svm_spec,
-                                        mars = mars_spec))
+                                        svm = svm_spec))
 
 ```
 
 ```{r}
 all_workflows <- bind_rows(basic, dummy, transform) %>% 
   mutate(wflow_id = gsub("(basic_)|(dummy_)|(transform_)", "", wflow_id))
+
 all_workflows
 ```
 
@@ -642,6 +637,7 @@ all_workflows
 
 ```{r}
 cl <- makePSOCKcluster(4)
+
 registerDoParallel(cl)
 ```
 
@@ -659,6 +655,7 @@ grid_results <-
  workflow_map(seed = 170, 
               resamples = spotify_folds, 
               grid = 25, 
+              metrics = metric_set(accuracy, bal_accuracy, precision, recall, sensitivity, specificity), 
               control = grid_ctrl)
 
 stopCluster(cl)
@@ -677,6 +674,6 @@ autoplot(
    metric = "accuracy",
    select_best = TRUE) + 
 geom_text(aes(y = mean - 0.03, label = wflow_id), angle = 90, hjust = 1) +
-lims(y = c(0.5, 0.8)) +
+lims(y = c(0.4, 0.8)) +
 theme(legend.position = "none")
 ```
