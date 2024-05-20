@@ -664,16 +664,18 @@ registerDoSEQ()
 grid_results %>% 
    rank_results() %>% 
    filter(.metric == "accuracy") %>% 
-   select(model, .config, acc = mean, rank)
+   select(model, .config, accuracy = mean, rank)
+
+saveRDS(grid_results, "grid_results_tune1.rds")
 ```
 
 ```{r}
 autoplot(
    grid_results,
-   rank_metric = "accuracy",
-   metric = "accuracy",
+   rank_metric = "bal_accuracy",
+   metric = "bal_accuracy",
    select_best = TRUE) + 
 geom_text(aes(y = mean - 0.03, label = wflow_id), angle = 90, hjust = 1) +
-lims(y = c(0.4, 0.8)) +
+lims(y = c(0.5, 0.9)) +
 theme(legend.position = "none")
 ```
