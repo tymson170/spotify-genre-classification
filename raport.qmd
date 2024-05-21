@@ -30,6 +30,7 @@ library(parsnip)
 library(discrim)
 library(doParallel)
 library(sparsediscrim)
+library(cvms)
 ```
 
 # Przygotowanie zbioru
@@ -468,7 +469,7 @@ df %>%
 #### energy vs. loudness
 
 ```{r}
-ggplot(df, aes(x = energy, y = loudness)) + geom_point() + geom_smooth(method = "lm", formula = y ~ poly(x, 2))
+ggplot(df, aes(x = energy, y = loudness)) + geom_point() + geom_smooth(method = "lm", formula = y ~ poly(x, 2, raw = TRUE))
 ```
 
 #### energy vs. acousticness
@@ -480,7 +481,7 @@ ggplot(df, aes(x = acousticness, y = energy)) + geom_point() + geom_smooth(metho
 #### loudness vs. acousticness
 
 ```{r}
-ggplot(df, aes(x = acousticness, y = loudness)) + geom_point() + geom_smooth(method = "lm", formula = y ~ poly(x, 2))
+ggplot(df, aes(x = acousticness, y = loudness)) + geom_point() + geom_smooth(method = "lm", formula = y ~ poly(x, 2, raw = TRUE))
 ```
 :::
 
@@ -663,10 +664,21 @@ registerDoSEQ()
 
 grid_results %>% 
    rank_results() %>% 
-   filter(.metric == "accuracy") %>% 
-   select(model, .config, accuracy = mean, rank)
+   filter(.metric == "bal_accuracy") %>% 
+   select(model, .config, bal_accuracy = mean, rank)
 
-saveRDS(grid_results, "grid_results_tune1.rds")
+grid_results %>% 
+   rank_results() %>% 
+   filter(.metric == "bal_accuracy") %>% 
+   select(model, .config, bal_accuracy = mean, rank) %>% 
+  group_by(model) %>% 
+  arrange(-bal_accuracy) %>% 
+  slice(1) %>% 
+  ungroup() %>% 
+  arrange(-bal_accuracy)
+
+# saveRDS(grid_results, "grid_results_tune2.rds")
+grid_results <- readRDS("grid_results_tune1.rds")
 ```
 
 ```{r}
@@ -676,6 +688,64 @@ autoplot(
    metric = "bal_accuracy",
    select_best = TRUE) + 
 geom_text(aes(y = mean - 0.03, label = wflow_id), angle = 90, hjust = 1) +
-lims(y = c(0.5, 0.9)) +
+lims(y = c(0.6, 0.9)) +
 theme(legend.position = "none")
+```
+
+```{r}
+best_results <- 
+  grid_results %>% 
+  extract_workflow_set_result("random_forest") %>% 
+  select_best(metric = "bal_accuracy")
+
+best_results
+```
+
+```{r}
+best_model_random_forest <- rand_forest(trees = best_results$trees,
+                             mtry = best_results$mtry,
+                             min_n = best_results$min_n) %>%
+  set_engine("ranger") %>% 
+  set_mode("classification")
+```
+
+```{r}
+rf_fit <- 
+  workflow() %>% 
+  add_model(best_model_random_forest) %>% 
+  add_recipe(basic_recipe) %>% 
+  fit(data = spotify_train)
+```
+
+```{r}
+test_pred <- predict(rf_fit, new_data = spotify_test) %>%
+  bind_cols(spotify_test) 
+
+metrics_set <- metric_set(accuracy, bal_accuracy, precision, recall, sensitivity, specificity)
+
+metrics_test <- metrics_set(test_pred,
+                    truth = genre, estimate = .pred_class)
+metrics_test
+```
+
+```{r}
+cfm <- table(test_pred$genre, test_pred$.pred_class)
+cfm
+```
+
+```{r}
+cfm_df <- as.data.frame(cfm)
+names(cfm_df) <- c("Truth", "Prediction", "Freq")
+
+# Visualization
+ggplot(cfm_df, aes(x = Prediction, y = Truth, fill = Freq)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = Freq), vjust = 0.5, color = "white", size = 5) + 
+  scale_fill_gradient(low = "lightblue", high = "blue") +  
+  labs(title = "Confusion Matrix", x = "Predicted Label",
+       y = "Actual Label") +
+  theme_minimal() +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14),
+        plot.title = element_text(hjust = 0.5))
 ```
