@@ -8,7 +8,7 @@ execute:
   warning: false
 ---
 
-```{r}
+```{r echo=FALSE}
 library(tidyverse)
 library(ggplot2)
 library(PerformanceAnalytics)
@@ -31,26 +31,37 @@ library(discrim)
 library(doParallel)
 library(sparsediscrim)
 library(cvms)
+library(kableExtra)
+library(htmlTable)
+library(shapr)
+library(vip)
 ```
 
 # Przygotowanie zbioru
 
 ## Wstępne uporządkowanie zbioru
 
-### Wczytanie zbioru
-
-```{r}
+```{r echo=FALSE}
 file <- read.csv("spotify-genres-classification-new.csv")
-head(file)
+kable(head(file), "html") %>% kable_styling("striped") %>% scroll_box(width = "100%")
 ```
 
 ### Usunięcie niepotrzebnych kolumn
 
-```{r}
+```{r echo=FALSE}
+print_oneperline <- function(x) {
+  cat(sprintf(paste0('% ', floor(log10(length(x))) + 3,'s "%s"\n'), 
+              paste0("[", seq_along(x), "]"), x), sep = "")
+  }
+```
+
+```{r echo=FALSE}
 df <- file %>% 
   select(-c("X", "playlist_id", "playlist_img", "playlist_owner_name", "playlist_owner_id", "track.id", "analysis_url", "added_at", "is_local", "primary_color", "added_by.href", "added_by.id", "added_by.type", "added_by.uri", "added_by.external_urls.spotify", "track.disc_number", "track.episode", "track.href", "track.is_local", "track.preview_url", "track.track", "track.track_number", "track.type", "track.uri", "track.album.album_type", "track.album.href", "track.album.id", "track.album.name", "track.album.total_tracks", "track.album.type", "track.album.uri", "track.album.external_urls.spotify", "track.external_ids.isrc", "track.external_urls.spotify", "video_thumbnail.url", "track.album.release_date_precision"))
+```
 
-colnames(df)
+```{r echo=FALSE}
+print_oneperline(colnames(df))
 ```
 
 Zostawiłem kolumnę odpowiadającą nazwie piosenki w celu łatwiejszej identyfikacji błędów napotkanych podczas wstępnego przygotowywania kolumn.
@@ -58,10 +69,11 @@ Zostawiłem kolumnę odpowiadającą nazwie piosenki w celu łatwiejszej identyf
 ### Dodanie kolumny odpowiadającej gatunkowi utworu
 
 ```{r}
-table(df$playlist_name)
+kable(table(df$playlist_name), "html", col.names = c("Variable", "Frequency")) %>%   kable_styling("striped") %>% 
+  scroll_box(height = "500px")
 ```
 
-```{r}
+```{r echo=FALSE}
 df$genre <- "NA"
 
 metal_playlists <- c("00s Metal Classics", "10s Metal Classics", "Metal Essentials")
@@ -86,8 +98,11 @@ df[df$playlist_name %in% reggae_playlists,]$genre <- "reggae"
 
 df <- df %>% 
   filter(genre != "NA")
+```
 
-table(df$genre)
+```{r}
+kable(table(df$genre), "html", col.names = c("Variable", "Frequency")) %>% 
+  kable_styling("striped")
 ```
 
 Usuwam kolumnę `playlist_name` bo nie jest już potrzebna.
@@ -101,114 +116,79 @@ df <- df %>%
 
 ```{r}
 any(is.na(df))
-df[!complete.cases(df), ]
+```
+
+```{r echo=FALSE}
+kable(df[!complete.cases(df), ], "html") %>% kable_styling("striped")
+```
+
+```{r}
 df <- na.omit(df)
 any(is.na(df))
 ```
 
-### Sprawdzenie poprawności typów danych
-
-```{r}
-str(df)
-```
-
 ### Identyfikacja duplikatów
 
+```{r echo=FALSE}
+duplicated(df$track.name) %>% 
+  table() %>% 
+  kable("html", table.attr = "style='width:30%;'", col.names = c("Is duplicated", "Frequency")) %>% 
+  kable_styling("striped")
+```
+
 ```{r}
-duplicated(df$track.name) %>% table()
 df <- df %>% 
   distinct(track.name, .keep_all = TRUE)
-duplicated(df$track.name) %>% table()
 ```
 
-### Usunięcie wiersza z tempem = 0
+```{r echo=FALSE}
+duplicated(df$track.name) %>% 
+  table() %>% 
+  kable("html", table.attr = "style='width:30%;'", col.names = c("Is duplicated", "Frequency")) %>% 
+  kable_styling("striped") 
+```
+
+### Weryfikacja poprawności danych
 
 ```{r}
-nrow(df)
+devtools::source_gist('4a0a5ab9fe7e1cf3be0e')
+strtable(df) %>% 
+  select(-levels) %>%  
+  kable("html") %>% 
+  kable_styling("striped") %>% 
+  scroll_box(height = "500px")
+```
+
+```{r echo=FALSE}
+funs <- lst(min, median, mean, max, sd)
+
+t(map_dfr(funs,
+        ~ summarize(df %>% select(-c(key, mode, time_signature)), 
+                    across(where(is.numeric), .x, na.rm = TRUE)),
+        .id = "statistic")) %>% 
+  kable("html") %>% 
+  kable_styling("striped")
+```
+
+#### Usunięcie wiersza z tempem = 0
+
+```{r echo=FALSE}
+df[df$tempo < 40, ] %>% kable("html") %>% kable_styling("striped")
+```
+
+```{r}
 df <- df %>% 
   filter(tempo != 0)
-nrow(df)
 ```
 
-### Zebranie metrum muzycznego innego niż 3/4, 4/4 i 5/4 w kategorię `inne`
-
-```{r}
-table(df$time_signature)
-```
-
-```{r}
-df[df$time_signature == 0,]$track.name
-```
-
-```{r}
-df[df$time_signature == 1, ]$track.name[33]
-```
-
-```{r}
-df$time_signature <- as.character(df$time_signature)
-df$time_signature <- ifelse(df$time_signature %in% c("3", "4", "5"),
-                            df$time_signature, 
-                            "other")
-table(df$time_signature)
-```
-
-### Wyciągnięcie z kolumny `track.album.release_date` samego roku
-
-```{r}
-df$track.album.release_date <- substr(df$track.album.release_date, 1, 4)
-colnames(df)[17] <- "release_year"
-df$release_year <- as.integer(df$release_year)
-head(df$release_year)
-table(df$release_year)
-```
-
-### Zmiana wartości w kolumnie `track.explicit` na 0 i 1
-
-```{r}
-df$track.explicit <- ifelse(df$track.explicit == TRUE, 1, 0)
-table(df$track.explicit)
-```
-
-## Kodowanie zmiennych kategorialnych
-
-```{r}
-table(df$key)
-```
-
-```{r}
-df$key <- factor(df$key_name)
-df$mode <- factor(df$mode_name)
-df$time_signature <- factor(df$time_signature, levels = c("3", "4", "5", "other"), labels = c("3/4", "4/4", "5/4", "other"))
-df$track.explicit <- factor(df$track.explicit, levels = c(0, 1), labels = c(0, 1))
-```
-
-#### Usunięcie nadmiarowej zmiennej `key_mode`
+#### Usunięcie nadmiarowych zmiennych `key_mode`, `key_name` oraz `mode_name`
 
 ```{r}
 df <- df %>% 
   select(-c(key_mode, key_name, mode_name))
 ```
 
-```{r}
-df$genre <- factor(df$genre)
-```
-
-### Zmiana zmiennej `release_year` na zmienną `decade`
-
-```{r}
-df$decade <- (df$release_year - df$release_year %% 10) %% 100
-table(df$decade)
-df[df$decade %in% c(30, 40, 50, 60), ]$decade <- "<70"
-df[df$decade == 0, ]$decade <- "00"
-df$decade <- as.character(df$decade)
-df$decade <- factor(df$decade, levels = c("<70", "70", "80", "90", "00", "10", "20"))
-str(df$decade)
-
-df <- df %>% 
-  select(-release_year)
-```
-
-### Zmiana jednostki w zmiennej `track.duration_ms` na sekundy
+#### Zmiana jednostki w zmiennej `track.duration_ms` na sekundy
 
 ```{r}
 df$track.duration_s <- df$track.duration_ms / 1000
@@ -216,18 +196,117 @@ df <- df %>%
   select(-track.duration_ms)
 ```
 
-### Rezygnacja ze zmiennej `popularity`
+#### Rezygnacja ze zmiennej `popularity`
+
+```{r}
+ggplot(df, aes(x = track.popularity)) + geom_histogram(bins = 30, fill = "#F8766D")
+```
 
 ```{r}
 nrow(df[df$track.popularity == 0, ])
+```
 
+```{r}
 df <- df %>% 
   select(-track.popularity)
 ```
 
+#### Zebranie metrum muzycznego innego niż 3/4, 4/4 i 5/4 w kategorię `inne`
+
+```{r echo=FALSE}
+table(df$time_signature) %>% 
+  kable("html", table.attr = "style='width:30%;'", col.names = c("Value", "Frequency")) %>% 
+  kable_styling("striped")
+```
+
+```{r}
+df[df$time_signature == 1, ]$track.name
+```
+
+{{< video https://www.youtube.com/watch?v=5ClCaPmAA7s >}}
+
+```{r echo}
+df$time_signature <- as.character(df$time_signature)
+df$time_signature <- ifelse(df$time_signature %in% c("3", "4"),
+                            df$time_signature, 
+                            "other")
+```
+
+```{r echo=FALSE}
+table(df$time_signature) %>% 
+  kable("html", table.attr = "style='width:30%;'", col.names = c("Value", "Frequency")) %>% 
+  kable_styling("striped")
+```
+
+#### Zmiana zmiennej `track.album.release_date` na zmienną `decade`
+
+```{r}
+df$track.album.release_date <- substr(df$track.album.release_date, 1, 4)
+colnames(df)[15] <- "release_year"
+df$release_year <- as.integer(df$release_year)
+df$decade <- (df$release_year - df$release_year %% 10) %% 100
+df[df$decade %in% c(30, 40, 50, 60), ]$decade <- "<70"
+df[df$decade == 0, ]$decade <- "00"
+df$decade <- as.character(df$decade)
+df$decade <- factor(df$decade, levels = c("<70", "70", "80", "90", "00", "10", "20"))
+
+df <- df %>% 
+  select(-release_year)
+```
+
+```{r echo=FALSE}
+table(df$decade) %>% 
+  kable("html", table.attr = "style='width:30%;'", col.names = c("Value", "Frequency")) %>% 
+  kable_styling("striped")
+```
+
+#### Zmiana wartości w kolumnie `track.explicit` na 0 i 1
+
+```{r}
+df$track.explicit <- ifelse(df$track.explicit == TRUE, 1, 0)
+```
+
+```{r echo=FALSE}
+table(df$track.explicit) %>% 
+  kable("html", table.attr = "style='width:30%;'", col.names = c("Value", "Frequency")) %>% 
+  kable_styling("striped")
+```
+
+#### Kodowanie zmiennych kategorialnych
+
+```{r}
+df$genre <- factor(df$genre)
+df$key <- factor(df$key)
+df$mode <- factor(df$mode)
+df$time_signature <- factor(df$time_signature)
+df$track.explicit <- factor(df$track.explicit)
+```
+
+### Efekt końcowy
+
+```{r echo=FALSE}
+devtools::source_gist('4a0a5ab9fe7e1cf3be0e')
+strtable(df) %>% 
+  select(-levels) %>%  
+  kable("html") %>% 
+  kable_styling("striped") %>% 
+  scroll_box(height = "500px")
+```
+
+```{r echo=FALSE}
+funs <- lst(min, median, mean, max, sd)
+
+t(map_dfr(funs,
+        ~ summarize(df %>% select(-c(key, mode, time_signature)), 
+                    across(where(is.numeric), .x, na.rm = TRUE)),
+        .id = "statistic")) %>% 
+  kable("html") %>% 
+  kable_styling("striped")
+```
+
 # Wizualizacja
 
-### Wykresy zmiennych
+### Rozkłady zmiennych
 
 ::: panel-tabset
 #### Zmienne kategorialne
@@ -235,31 +314,31 @@ df <- df %>%
 ::: panel-tabset
 ##### Gatunek
 
-```{r}
+```{r echo=FALSE}
 ggplot(df, aes(x = genre)) + geom_bar(fill = "#F8766D")
 ```
 
 ##### Skale
 
-```{r}
+```{r echo=FALSE}
 ggplot(df, aes(x = key, fill = mode)) + geom_bar()
 ```
 
 ##### Metrum
 
-```{r}
+```{r echo=FALSE}
 ggplot(df, aes(x = time_signature)) + geom_bar(fill = "#F8766D")
 ```
 
 ##### Wulgarność
 
-```{r}
+```{r echo=FALSE}
 ggplot(df, aes(x = track.explicit)) + geom_bar(fill = "#F8766D")
 ```
 
 ##### Dekada
 
-```{r}
+```{r echo=FALSE}
 ggplot(df, aes(x = decade)) + geom_bar(fill = "#F8766D")
 ```
 :::
@@ -269,61 +348,61 @@ ggplot(df, aes(x = decade)) + geom_bar(fill = "#F8766D")
 ::: panel-tabset
 ##### Taneczność
 
-```{r}
+```{r echo=FALSE}
 ggplot(df, aes(x = danceability)) + geom_histogram(bins = 30, fill = "#F8766D")
 ```
 
 ##### Energiczność
 
-```{r}
+```{r echo=FALSE}
 ggplot(df, aes(x = energy)) + geom_histogram(bins = 30, fill = "#F8766D")
 ```
 
 ##### Głośność
 
-```{r}
+```{r echo=FALSE}
 ggplot(df, aes(x = loudness)) + geom_histogram(bins = 30, fill = "#F8766D")
 ```
 
 ##### Recytowalność
 
-```{r}
+```{r echo=FALSE}
 ggplot(df, aes(x = speechiness)) + geom_histogram(bins = 30, fill = "#F8766D")
 ```
 
 ##### Akustyczność
 
-```{r}
+```{r echo=FALSE}
 ggplot(df, aes(x = acousticness)) + geom_histogram(bins = 30, fill = "#F8766D")
 ```
 
 ##### Instrumentalność
 
-```{r}
+```{r echo=FALSE}
 ggplot(df, aes(x = instrumentalness)) + geom_histogram(bins = 30, fill = "#F8766D")
 ```
 
 ##### Wersja na żywo
 
-```{r}
+```{r echo=FALSE}
 ggplot(df, aes(x = liveness)) + geom_histogram(bins = 30, fill = "#F8766D")
 ```
 
 ##### Pozytywność nastroju
 
-```{r}
+```{r echo=FALSE}
 ggplot(df, aes(x = valence)) + geom_histogram(bins = 30, fill = "#F8766D")
 ```
 
 ##### Tempo
 
-```{r}
+```{r echo=FALSE}
 ggplot(df, aes(x = tempo)) + geom_histogram(bins = 30, fill = "#F8766D")
 ```
 
 ##### Długość
 
-```{r}
+```{r echo=FALSE}
 ggplot(df, aes(x = track.duration_s)) + geom_histogram(bins = 30, fill = "#F8766D")
 ```
 :::
@@ -331,69 +410,69 @@ ggplot(df, aes(x = track.duration_s)) + geom_histogram(bins = 30, fill = "#F8766
 
 ### Dekada w zależności od gatunku
 
-```{r}
-genres <- as.character(unique(df$genre))
+```{r echo=FALSE}
+genres <- unique(df$genre)
 ```
 
 ::: panel-tabset
 ##### Blues
 
-```{r}
+```{r echo=FALSE}
 ggplot(df[df$genre == genres[1], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[1], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
 ```
 
 ##### Muzyka klasyczna
 
-```{r}
+```{r echo=FALSE}
 ggplot(df[df$genre == genres[2], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[2], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
 ```
 
 ##### Country
 
-```{r}
+```{r echo=FALSE}
 ggplot(df[df$genre == genres[3], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[3], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
 ```
 
 ##### Folk
 
-```{r}
+```{r echo=FALSE}
 ggplot(df[df$genre == genres[4], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[4], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
 ```
 
 ##### Jazz
 
-```{r}
+```{r echo=FALSE}
 ggplot(df[df$genre == genres[5], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[5], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
 ```
 
 ##### Hiphop
 
-```{r}
+```{r echo=FALSE}
 ggplot(df[df$genre == genres[6], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[6], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
 ```
 
 ##### Reggae
 
-```{r}
+```{r echo=FALSE}
 ggplot(df[df$genre == genres[7], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[7], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
 ```
 
 ##### Rock
 
-```{r}
+```{r echo=FALSE}
 ggplot(df[df$genre == genres[8], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[8], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
 ```
 
 ##### Metal
 
-```{r}
+```{r echo=FALSE}
 ggplot(df[df$genre == genres[9], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[9], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
 ```
 :::
 
 ### Treści wulgarne w zależności od gatunku
 
-```{r}
+```{r echo=FALSE}
 df %>% 
   filter(track.explicit == 1) %>% 
   group_by(genre) %>% 
@@ -403,16 +482,41 @@ df %>%
 geom_text(aes(label = paste0(round(n/all*100, 2), "%")), position = position_dodge(width = 0.9), vjust = -0.25)
 ```
 
+### Energy vs. loudness
+
+```{r echo=FALSE}
+ggplot(df, aes(x = energy, y = loudness, colour = genre)) + geom_point()
+```
+
+### Danceability vs. valence
+
+```{r echo=FALSE}
+ggplot(df, aes(x = danceability, y = valence, colour = genre)) + geom_point()
+```
+
+### Głośność
+
+```{r echo=FALSE}
+df %>% 
+  group_by(decade, genre) %>% 
+  summarise(loudness = round(mean(loudness), 2)) %>% 
+  ungroup() %>% 
+  plot_ly(x = ~decade, y = ~loudness, color = ~genre, hovertext = ~loudness) %>% 
+  add_lines(hovertemplate = paste0("Average loudness: %{hovertext}"))
+```
+
 ### Boxploty długości piosenek
 
-```{r}
+```{r echo=FALSE}
 ggplot(df, aes(y = track.duration_s/60, x = genre, fill = genre)) + geom_boxplot() + theme(legend.position = "") + ylab("Track length (minutes)")
 ```
 
-```{r}
+```{r echo=FALSE}
 df %>%
 group_by(genre) %>%
-summarise(rozmiar_próby=length(track.duration_s), p_wartość_Shapiro_Wilk=shapiro.test(track.duration_s)$p.value)
+summarise(sample_size=length(track.duration_s), p_value=shapiro.test(track.duration_s)$p.value)  %>% 
+  kable("html") %>% 
+  kable_styling("striped")
 ```
 
 ```{r}
@@ -425,40 +529,26 @@ kruskal.test(track.duration_s ~ genre, df)
 
 ```{r}
 dunntest <- dunn_test(df, track.duration_s ~ genre, p.adjust.method = "bonferroni")
-dunntest
 ```
 
-```{r}
+```{r echo=FALSE}
 dunntest <- dunntest %>% add_xy_position(x = "genre")
 ggboxplot(df, x = "genre", y = "track.duration_s", fill = "genre", legend = "") + stat_pvalue_manual(dunntest, hide.ns = TRUE, label = "{round(p.adj, 2)}") 
 ```
 
-### Energy vs. loudness
+### Zależność zmiennej `valence` od skali
 
-```{r}
-ggplot(df, aes(x = energy, y = loudness, colour = genre)) + geom_point()
+```{r echo=FALSE}
+ggplot(df, aes(x = mode, y = valence)) + geom_boxplot()
 ```
 
-### Danceability vs. valence
-
 ```{r}
-ggplot(df, aes(x = danceability, y = valence, colour = genre)) + geom_point()
-```
-
-### Głośność
-
-```{r}
-df %>% 
-  group_by(decade, genre) %>% 
-  summarise(loudness = round(mean(loudness), 2)) %>% 
-  ungroup() %>% 
-  plot_ly(x = ~decade, y = ~loudness, color = ~genre, hovertext = ~loudness) %>% 
-  add_lines(hovertemplate = paste0("Average loudness: %{hovertext}"))
+t.test(valence ~ mode, data = df)
 ```
 
 ### Wykres korelacji
 
-```{r}
+```{r echo=FALSE}
 df %>% 
   select(where(is.numeric)) %>%
   cor() %>% 
@@ -468,24 +558,24 @@ df %>%
 ::: panel-tabset
 #### energy vs. loudness
 
-```{r}
+```{r echo=FALSE}
 ggplot(df, aes(x = energy, y = loudness)) + geom_point() + geom_smooth(method = "lm", formula = y ~ poly(x, 2, raw = TRUE))
 ```
 
 #### energy vs. acousticness
 
-```{r}
+```{r echo=FALSE}
 ggplot(df, aes(x = acousticness, y = energy)) + geom_point() + geom_smooth(method = "lm")
 ```
 
 #### loudness vs. acousticness
 
-```{r}
+```{r echo=FALSE}
 ggplot(df, aes(x = acousticness, y = loudness)) + geom_point() + geom_smooth(method = "lm", formula = y ~ poly(x, 2, raw = TRUE))
 ```
 :::
 
-```{r}
+```{r echo=FALSE}
 fig <- plot_ly(df, x = ~energy, y = ~loudness, z = ~acousticness, color = ~genre)
 fig <- fig %>% add_markers(size = 0.8)
 fig <- fig %>% layout(scene = list(xaxis = list(title = 'energy'),
@@ -499,17 +589,6 @@ fig
 ```{r}
 df <- df %>% 
   select(-c(loudness, acousticness))
-```
-
-### Zależność zmiennej `valence` od skali
-
-```{r}
-ggplot(df, aes(x = mode, y = valence)) + geom_boxplot()
-```
-
-```{r}
-ttest <- t.test(valence ~ mode, data = df)
-ttest
 ```
 
 # Modelowanko
@@ -538,26 +617,24 @@ spotify_folds
 
 Modele i rekomendowany preprocessing:
 
--   LDA - dummy, zv, decorrelate, transform
-
--   regresja logistyczna - dummy, zv, decorrelate, transform
-
--   mlp - dummy, zv, decorrelate, normalize, transform
-
--   k-najbliższych sąsiadów - dummy, zv, decorrelate, normalize, transform
-
--   las losowy - zv, decorrelate
-
--   xgboost - zv, decorrelate, dummy
-
--   svm - dummy, zv, decorrelate, normalize, transform
+| Rodzaj modelu | Dummy vars | Zero-variance | Decorrelate | Normalize | Transform |
+|---------------|------------|---------------|-------------|-----------|-----------|
+| Random forest | ✗          | ◌             | ◌           | ✗         | ✗         |
+| Bagging       | ✗          | ✗             | ◌           | ✗         | ✗         |
+| XGBoost       | ✗          | ◌             | ◌           | ✗         | ✗         |
+| Mlp           | ✓          | ✓             | ✓           | ✓         | ✓         |
+| Knn           | ✓          | ✓             | ◌           | ✓         | ✓         |
+| Svm           | ✓          | ✓             | ✓           | ✓         | ✓         |
+| Naive Bayes   | ✗          | ✓             | ◌           | ✗         | ✗         |
 
 ```{r}
 basic_recipe <-
   recipe(genre~., data = spotify_train) %>% 
   update_role(track.name, new_role = "track_name") %>% 
   step_zv(all_predictors())
+```
 
+```{r echo=FALSE}
 basic_recipe %>% summary()
 ```
 
@@ -574,9 +651,16 @@ transform_recipe <-
   step_normalize(all_numeric_predictors())
 ```
 
+```{r echo=FALSE}
+summary(transform_recipe %>% prep(spotify_train)) %>% 
+  kable("html") %>% 
+  kable_styling("striped") %>% 
+  scroll_box(height = "500px")
+```
+
 ```{r}
 rf_spec <- rand_forest(mtry = tune(), min_n = tune(), trees = tune()) %>% 
-  set_engine("ranger") %>% 
+  set_engine("ranger", importance = "impurity") %>% 
   set_mode("classification")
 
 bagging_spec <- bag_tree(min_n = tune(), tree_depth = tune()) %>% 
@@ -624,22 +708,15 @@ transform <- workflow_set(preproc = list(transform = transform_recipe),
                           models = list(mlp = mlp_spec, 
                                         knn = nearest_spec, 
                                         svm = svm_spec))
-
 ```
 
 ```{r}
 all_workflows <- bind_rows(basic, dummy, transform) %>% 
   mutate(wflow_id = gsub("(basic_)|(dummy_)|(transform_)", "", wflow_id))
-
-all_workflows
 ```
 
-### Inicjalizacja przetwarzania równoległego
-
-```{r}
-cl <- makePSOCKcluster(4)
-
-registerDoParallel(cl)
+```{r echo=FALSE}
+all_workflows
 ```
 
 ### Tuning modeli
@@ -650,6 +727,11 @@ grid_ctrl <-
     save_pred = TRUE,
     parallel_over = "everything",
     save_workflow = TRUE)
+```
+
+```{r eval=FALSE}
+cl <- makePSOCKcluster(4)
+registerDoParallel(cl)
 
 grid_results <- 
  all_workflows %>% 
@@ -661,6 +743,12 @@ grid_results <-
 
 stopCluster(cl)
 registerDoSEQ()
+
+# saveRDS(grid_results, "grid_results_tune2.rds")
+```
+
+```{r echo=FALSE}
+# grid_results <- readRDS("grid_results_tune1.rds")
 
 grid_results %>% 
    rank_results() %>% 
@@ -676,12 +764,9 @@ grid_results %>%
   slice(1) %>% 
   ungroup() %>% 
   arrange(-bal_accuracy)
-
-# saveRDS(grid_results, "grid_results_tune2.rds")
-grid_results <- readRDS("grid_results_tune1.rds")
 ```
 
-```{r}
+```{r echo=FALSE}
 autoplot(
    grid_results,
    rank_metric = "bal_accuracy",
@@ -697,7 +782,9 @@ best_results <-
   grid_results %>% 
   extract_workflow_set_result("random_forest") %>% 
   select_best(metric = "bal_accuracy")
+```
 
+```{r echo=FALSE}
 best_results
 ```
 
@@ -710,10 +797,13 @@ best_model_random_forest <- rand_forest(trees = best_results$trees,
 ```
 
 ```{r}
-rf_fit <- 
+rf_wflow <- 
   workflow() %>% 
   add_model(best_model_random_forest) %>% 
-  add_recipe(basic_recipe) %>% 
+  add_recipe(basic_recipe)
+
+rf_fit <- 
+  rf_wflow %>% 
   fit(data = spotify_train)
 ```
 
@@ -725,15 +815,14 @@ metrics_set <- metric_set(accuracy, bal_accuracy, precision, recall, sensitivity
 
 metrics_test <- metrics_set(test_pred,
                     truth = genre, estimate = .pred_class)
+```
+
+```{r echo=FALSE}
 metrics_test
 ```
 
-```{r}
+```{r echo=FALSE}
 cfm <- table(test_pred$genre, test_pred$.pred_class)
-cfm
-```
-
-```{r}
 cfm_df <- as.data.frame(cfm)
 names(cfm_df) <- c("Truth", "Prediction", "Freq")
 
@@ -748,4 +837,51 @@ ggplot(cfm_df, aes(x = Prediction, y = Truth, fill = Freq)) +
   theme(axis.text = element_text(size = 12),
         axis.title = element_text(size = 14),
         plot.title = element_text(hjust = 0.5))
+```
+
+```{r echo=FALSE}
+wrong_pred <- test_pred %>% 
+  select(track.name, genre, .pred_class) %>% 
+  filter(genre != .pred_class)
+```
+
+```{r echo=FALSE}
+wrong_pred %>% 
+  filter(genre == "jazz" & .pred_class == "metal") %>%
+  kable("html") %>% 
+  kable_styling("striped")
+```
+
+{{< video https://www.youtube.com/watch?v=dYxgci2uPno >}}
+
+```{r}
+random_forest <- rand_forest(mtry = best_results$mtry, min_n = best_results$min_n, trees = best_results$trees) %>% 
+  set_engine("ranger", importance = "impurity") %>% 
+  set_mode("classification")
+
+last_rf_workflow <- 
+  workflow() %>% 
+  add_model(random_forest) %>% 
+  add_recipe(basic_recipe) %>% 
+  last_fit(split) %>% 
+  collect_metrics() %>% 
+  extract_fit_parsnip() %>% 
+  vip(num_features = 13)
+
+last_rf_workflow
+```
+
+```{r}
+rf_wflow_fin <- rf_wflow %>% 
+  finalize_workflow(best_model_random_forest)
+```
+
+```{r}
+rf_res <- last_fit(rf_wflow_fin, split = split) %>% 
+  extract_fit_parsnip() %>% 
+  vip(num_features = 13)
+```
+
+```{r}
+rf_res
 ```
