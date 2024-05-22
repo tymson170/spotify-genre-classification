@@ -748,7 +748,7 @@ registerDoSEQ()
 ```
 
 ```{r echo=FALSE}
-# grid_results <- readRDS("grid_results_tune1.rds")
+grid_results <- readRDS("grid_results_tune1.rds")
 
 grid_results %>% 
    rank_results() %>% 
@@ -864,7 +864,6 @@ last_rf_workflow <-
   add_model(random_forest) %>% 
   add_recipe(basic_recipe) %>% 
   last_fit(split) %>% 
-  collect_metrics() %>% 
   extract_fit_parsnip() %>% 
   vip(num_features = 13)
 
@@ -872,16 +871,9 @@ last_rf_workflow
 ```
 
 ```{r}
-rf_wflow_fin <- rf_wflow %>% 
-  finalize_workflow(best_model_random_forest)
-```
-
-```{r}
-rf_res <- last_fit(rf_wflow_fin, split = split) %>% 
-  extract_fit_parsnip() %>% 
-  vip(num_features = 13)
-```
-
-```{r}
-rf_res
+rf_wflow %>% 
+  last_fit(split) %>% 
+  collect_predictions() %>% 
+  roc_curve(truth = genre, .pred_blues, .pred_classical, .pred_country, .pred_folk, .pred_hiphop, .pred_jazz, .pred_metal, .pred_reggae, .pred_rock) %>% 
+  autoplot()
 ```
