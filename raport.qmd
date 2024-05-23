@@ -37,6 +37,8 @@ library(shapr)
 library(vip)
 ```
 
+# Cel projektu
+
 # Przygotowanie zbioru
 
 ## Wstępne uporządkowanie zbioru
@@ -584,6 +586,24 @@ fig <- fig %>% layout(scene = list(xaxis = list(title = 'energy'),
 fig
 ```
 
+#### PCA próba
+
+```{r}
+library(factoextra)
+enloac <- df %>% 
+  select(energy, loudness, acousticness)
+
+pca <- prcomp(enloac, 
+              center = TRUE, 
+              scale. = TRUE)
+
+fviz_eig(pca)
+```
+
+```{r}
+fviz_contrib(pca, choice = "var", axes = 1)
+```
+
 #### Porzucenie zmiennych `loudness` i `acousticness`
 
 ```{r}
@@ -617,15 +637,15 @@ spotify_folds
 
 Modele i rekomendowany preprocessing:
 
-| Rodzaj modelu | Dummy vars | Zero-variance | Decorrelate | Normalize | Transform |
-|---------------|------------|---------------|-------------|-----------|-----------|
-| Random forest | ✗          | ◌             | ◌           | ✗         | ✗         |
-| Bagging       | ✗          | ✗             | ◌           | ✗         | ✗         |
-| XGBoost       | ✗          | ◌             | ◌           | ✗         | ✗         |
-| Mlp           | ✓          | ✓             | ✓           | ✓         | ✓         |
-| Knn           | ✓          | ✓             | ◌           | ✓         | ✓         |
-| Svm           | ✓          | ✓             | ✓           | ✓         | ✓         |
-| Naive Bayes   | ✗          | ✓             | ◌           | ✗         | ✗         |
+| Rodzaj modelu | Dummy vars   | Zero-variance | Decorrelate  | Normalize    | Transform    |
+|------------|------------|------------|------------|------------|------------|
+| Random forest |  ✗           |  ◌            |  ◌           |  ✗           |  ✗           |
+| Bagging       |  ✗           |  ✗            |  ◌           |  ✗           |  ✗           |
+| XGBoost       |  ✗           |  ◌            |  ◌           |  ✗           |  ✗           |
+| Mlp           |  ✓           |  ✓            |  ✓           |  ✓           |  ✓           |
+| Knn           |  ✓           |  ✓            |  ◌           |  ✓           |  ✓           |
+| Svm           |  ✓           |  ✓            |  ✓           |  ✓           |  ✓           |
+| Naive Bayes   |  ✗           |  ✓            |  ◌           |  ✗           |  ✗           |
 
 ```{r}
 basic_recipe <-
