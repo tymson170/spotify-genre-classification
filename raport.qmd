@@ -750,7 +750,13 @@ W praktyce, skale molowe i oparte na nich utwory muzyczne uważa się za mające
 ggplot(df, aes(x = mode, y = valence)) + geom_boxplot()
 ```
 
-Patrząc na wykresy pudełkowe wygląda na to, że zmienna `valence` nie zależy od tego, czy utwór jest w skali durowej czy molowej. Potwierdzenie otrzymamy przeprowadzając test t-Studenta.
+Patrząc na wykresy pudełkowe wygląda na to, że zmienna `valence` nie zależy od tego, czy utwór jest w skali durowej czy molowej. Potwierdzenie otrzymamy przeprowadzając test t-Studenta wcześniej sprawdzając założenie o jednorodności wariancji.
+
+```{r}
+var.test(df[df$mode == 0, ]$valence, df[df$mode == 1, ]$valence)
+```
+
+Założenie o jednorodności wariancji jest spełnione. Przeprowadzę zatem t-test.
 
 ```{r}
 t.test(valence ~ mode, data = df)
@@ -852,7 +858,7 @@ spotify_test <- testing(split)
 split
 ```
 
-## Przygotowanie 10-krotnej walidacji krzyżowej z 5-krotnym powtórzeniem (?)
+## Przygotowanie 10-krotnej walidacji krzyżowej
 
 ```{r}
 spotify_folds <- vfold_cv(spotify_train, strata = genre)
@@ -1125,8 +1131,7 @@ metrics_test <- metrics_set(test_pred,
 metrics_test
 ```
 
-Zbalansowana dokładność na zbiorze testowym na poziomie 0.847 jest całkiem zadowalająca. Oznacza, że wybrany model posiada dobre zdolności generalizacyjne.
-Zweryfikujmy jak sobie poradził za w konkretnych przypadkach za pomocą macierzy konfuzji.
+Zbalansowana dokładność na zbiorze testowym na poziomie 0.847 jest całkiem zadowalająca. Oznacza, że wybrany model posiada dobre zdolności generalizacyjne. Zweryfikujmy jak sobie poradził za w konkretnych przypadkach za pomocą macierzy konfuzji.
 
 ```{r echo=FALSE}
 cfm <- table(test_pred$genre, test_pred$.pred_class)
@@ -1146,8 +1151,7 @@ ggplot(cfm_df, aes(x = Prediction, y = Truth, fill = Freq)) +
         plot.title = element_text(hjust = 0.5))
 ```
 
-Z powyższego wykresu można wysnuć wiele ciekawych wniosków. Model aż najwięcej, bo aż 12 razy, pomylił blues z jazzem, co jest dosyć zrozumiałym błędem zważając na podobieństwo tych gatunków. Rock i country zostało pomylone z największą ilością gatunków. Hip-hop, jeżeli był mylnie klasyfikowany, to tylko jako reggae.
-Dzięki temu, że nie usunąłem ze zbioru zmiennej określającej tytuł piosenki mogę teraz dokładniej przyjrzeć się poszczególnym błędom. Najbardziej przykuł moją uwagę jeden utwór jazzowy, który został pomylony z utworem metalowym.
+Z powyższego wykresu można wysnuć wiele ciekawych wniosków. Model aż najwięcej, bo aż 12 razy, pomylił blues z jazzem, co jest dosyć zrozumiałym błędem zważając na podobieństwo tych gatunków. Rock i country zostało pomylone z największą ilością gatunków. Hip-hop, jeżeli był mylnie klasyfikowany, to tylko jako reggae. Dzięki temu, że nie usunąłem ze zbioru zmiennej określającej tytuł piosenki mogę teraz dokładniej przyjrzeć się poszczególnym błędom. Najbardziej przykuł moją uwagę jeden utwór jazzowy, który został pomylony z utworem metalowym.
 
 ```{r echo=FALSE}
 wrong_pred <- test_pred %>% 
@@ -1166,7 +1170,8 @@ wrong_pred %>%
 
 Po jego wysłuchaniu staje się zrozumiałe, dlaczego model pomylił się w tym przypadku. Jest to utwór szybki, agresywny i ponury i mimo że jazzowy, to ma on w sobie elementy metalu.
 
-Inną ciekawą pomyłką jest utwór metalowy sklasyfikowany jako utwór muzyki klasycznej. 
+Inną ciekawą pomyłką jest utwór metalowy sklasyfikowany jako utwór muzyki klasycznej.
+
 ```{r}
 wrong_pred %>% 
   filter(genre == "metal" & .pred_class == "classical") %>%
@@ -1199,4 +1204,5 @@ f_imp <-
 ```{r echo=FALSE}
 f_imp
 ```
+
 Z powyższego wykresu można zauważyć, że najważniejszą cechą przy podziałach stosowanych w tworzeniu optymalnego modelu lasu losowego było `energy`, `danceability` oraz `danceability`. Najmniej przydały się natomiast zmienne `key`, `mode` oraz `time_signature`, co nie jest zaskoczeniem, ponieważ gatunki nigdy nie ogarniczają się do konkretnych skal ani struktur.
