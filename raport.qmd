@@ -774,7 +774,6 @@ df %>%
   corPlot(cex = 0.5, xlas = 2)
 ```
 
-
 ```{r echo=FALSE}
 df %>% 
   select(where(is.numeric)) %>%
@@ -843,9 +842,11 @@ Z powyższego wykresu widać, że pierwszy wymiar wyjaśnia aż około 80% zmien
 fviz_contrib(pca, choice = "var", axes = 1)
 ```
 
-Wykres wkładu zmiennych w pierwszy wymiar oraz linia odcięcia sugerują, że zmienna `energy` ma istotnie największy wpływ w tworzenie się tego wymiaru. Na tej podstawie decyduję się więc na to, żeby z trójki zmiennych `energy`, `acousticness` i `loudness` zostawić tylko `energy`, co wyeliminuje problem wysokiem korelacji pomiędzy częścią zmiennych zależnych w zbiorze.
+Wykres wkładu zmiennych w pierwszy wymiar oraz linia odcięcia sugerują, że zmienna `energy` ma istotnie największy wpływ w tworzenie się tego wymiaru. Na tej podstawie decyduję się więc na to, żeby z trójki zmiennych `energy`, `acousticness` i `loudness` zostawić tylko `energy`, co wyeliminuje problem wysokiej korelacji pomiędzy częścią zmiennych zależnych w zbiorze. Później sprawdzę też jednak jak będzie się spisywał model zbudowany na zbiorze z usuniętymi zmiennymi. "Wysoka korelacja" jest bowiem płynnym określeniem - niektóre źródła podają, że zaczyna się ona już od wartości 0.7, natomiast czasami o wysokiej korelacji mówi się dopiero od 0.9. Jest zatem szansa, że korelacja, która tu wystąpiła, nie miała wpływu na przyszłą skuteczność predykcyjną modelu.
 
 ```{r}
+df2 <- df
+
 df <- df %>% 
   select(-c(loudness, acousticness))
 ```
@@ -1032,8 +1033,6 @@ grid_results <-
 
 stopCluster(cl)
 registerDoSEQ()
-
-
 ```
 
 ```{r echo=FALSE}
@@ -1041,23 +1040,145 @@ registerDoSEQ()
 grid_results <- readRDS("grid_results_tune_changed_ts.rds")
 ```
 
-```{r echo=FALSE}
-grid_results %>% 
-   rank_results()
+Za pomocą tych samych kroków znajdę również najlepsze parametry dla zbioru, w którym nie usunąłem zmiennych `loudness` i `acousticness`.
+
+```{r}
+#| code-fold: true
+
+set.seed(170)
+
+split2 <- initial_split(df2, prop = 0.8, strata = genre)
+spotify_train2 <- training(split2)
+spotify_test2 <- testing(split2)
+
+spotify_folds2 <- vfold_cv(spotify_train2, strata = genre)
+
+basic_recipe2 <-
+  recipe(genre~., data = spotify_train2) %>% 
+  update_role(track.name, new_role = "track_name") %>% 
+  step_zv(all_predictors())
+
+dummy_recipe2 <- 
+  basic_recipe2 %>% 
+  step_dummy(all_nominal_predictors())
+
+transform_recipe2 <-
+  dummy_recipe2 %>% 
+  step_YeoJohnson(all_numeric_predictors()) %>% 
+  step_normalize(all_numeric_predictors())
+
+basic2 <- workflow_set(preproc = list(basic = basic_recipe2), 
+                      models = list(random_forest = rf_spec, 
+                                    bagging = bagging_spec, 
+                                    naive_bayes = bayes_spec))
+
+dummy2 <- workflow_set(preproc = list(dummy = dummy_recipe2), 
+                      models = list(xgb = xgb_spec))
+
+transform2 <- workflow_set(preproc = list(transform = transform_recipe2), 
+                          models = list(mlp = mlp_spec, 
+                                        knn = nearest_spec, 
+                                        svm = svm_spec))
+
+all_workflows2 <- bind_rows(basic2, dummy2, transform2) %>% 
+  mutate(wflow_id = gsub("(basic_)|(dummy_)|(transform_)", "", wflow_id))
 ```
 
-Wygląda na to, że według każdej metryki model lasu losowego okazuje się być najlepszy.
 
+```{r eval=FALSE}
+#| code-fold: true
+
+grid_ctrl2 <- 
+  control_grid(
+    save_pred = TRUE,
+    parallel_over = "everything",
+    save_workflow = TRUE)
+
+cl <- makePSOCKcluster(4)
+registerDoParallel(cl)
+
+grid_results2 <- 
+ all_workflows2 %>% 
+ workflow_map(seed = 170, 
+              resamples = spotify_folds2, 
+              grid = 25, 
+              metrics = metric_set(accuracy, bal_accuracy, precision, recall, sensitivity, specificity), 
+              control = grid_ctrl2)
+
+stopCluster(cl)
+registerDoSEQ()
+```
+
+
+```{r echo=FALSE}
+# saveRDS(grid_results2, "grid_results_tune_wla.rds")
+grid_results2 <- readRDS("grid_results_tune_wla.rds")
+```
+
+## Wyniki tuningu
+
+:::: columns
+::: column
+
+**Zbiór bez `loudness` i `acousticness`**
+```{r echo=FALSE}
+grid_results %>% 
+   rank_results() %>% 
+   select(wflow_id, .metric, mean) %>% 
+  head()
+```
+:::
+::: column
+
+**Zbiór z tymi zmiennymi**
+```{r echo=FALSE}
+grid_results2 %>% 
+   rank_results()%>% 
+   select(wflow_id, .metric, mean) %>% 
+  head()
+```
+:::
+::::
+
+Wygląda na to, że według każdej metryki model lasu losowego okazuje się być najlepszy. Dodatkowo wygląda na to, że model zbudowany na podstawie zbioru ze zmiennymi `loudness` i `acousticness` jest minimalnie lepszy.
+
+:::: columns
+:::column
+
+**Zbiór bez `loudness` i `acousticness`**
 ```{r echo=FALSE}
 grid_results %>% 
    rank_results() %>% 
    filter(.metric == "bal_accuracy") %>% 
-   select(model, .config, bal_accuracy = mean, rank)
+   select(wflow_id, bal_accuracy = mean) %>% 
+  head()
 ```
+:::
+::: column
 
-Po przyjęciu za główną metrykę `balanced accuracy` model lasu losowego również wygląda na najlepszy.
+**Zbiór z tymi zmiennymi**
+```{r echo=FALSE}
+grid_results2 %>% 
+   rank_results() %>% 
+   filter(.metric == "bal_accuracy") %>% 
+   select(wflow_id, bal_accuracy = mean) %>%
+  head() 
+```
+:::
+::::
+
+
+Po przyjęciu za główną metrykę porównawczą `balanced accuracy` model lasu losowego również zdecydowanie wygląda na najlepszy. Można więc na tym etapie przypuszczać, że wyeliminowanie korelacji nie wpłynęło na poprawę modelu, a nawet nieznacznie ją pogorszyło, co jednak zweryfikuję później ostatecznie sprawdzając dokładność każdego z modeli na zbiorze testowym. 
 
 ```{r echo=FALSE}
+#| label: fig-per
+#| fig-subcap:
+#|   - "Zbiór bez `loudness` i `acousticness`"
+#|   - "Zbiór z tymi zmiennymi"
+#| layout-ncol: 2
+#| column: page
+
+
 autoplot(
    grid_results,
    rank_metric = "bal_accuracy",
@@ -1066,44 +1187,103 @@ autoplot(
 geom_text(aes(y = mean - 0.03, label = wflow_id), angle = 90, hjust = 1) +
 lims(y = c(0.6, 0.9)) +
 theme(legend.position = "none")
+  
+autoplot(
+   grid_results2,
+   rank_metric = "bal_accuracy",
+   metric = "bal_accuracy",
+   select_best = TRUE) + 
+geom_text(aes(y = mean - 0.03, label = wflow_id), angle = 90, hjust = 1) +
+lims(y = c(0.6, 0.9)) +
+theme(legend.position = "none")
 ```
+
+:::: columns
+::: column
 
 ```{r echo=FALSE}
 grid_results %>% 
    rank_results() %>% 
    filter(.metric == "bal_accuracy") %>% 
-   select(model, .config, bal_accuracy = mean, rank) %>% 
+   select(model, bal_accuracy = mean) %>% 
   group_by(model) %>% 
   arrange(-bal_accuracy) %>% 
   slice(1) %>% 
   ungroup() %>% 
   arrange(-bal_accuracy)
 ```
+:::
+::: column
 
-Zestawienie najlepszego modelu każdego rodzaju pokazuje, że w naszym zadaniu klasyfikacyjnym najlepiej poradziły sobie modele drzew, najsłabiej natomiast spisał się naiwny klasyfikator bayesowski.
+```{r echo=FALSE}
+grid_results2 %>% 
+   rank_results() %>% 
+   filter(.metric == "bal_accuracy") %>% 
+   select(model, bal_accuracy = mean) %>% 
+  group_by(model) %>% 
+  arrange(-bal_accuracy) %>% 
+  slice(1) %>% 
+  ungroup() %>% 
+  arrange(-bal_accuracy)
+```
+:::
+::::
 
-## Stworzenie najlepszego modelu wybranego przez przeszukiwanie siatki
 
-Ostatecznie decyduję się na skorzystanie z modelu lasu losowego, ponieważ w każdym zestawieniu radził on sobie najlepiej.
+Zestawienie najlepszego modelu każdego rodzaju potwierdza, że w naszym zadaniu najlepiej poradziły sobie modele "drzewiaste", najsłabiej natomiast spisał się naiwny klasyfikator bayesowski. Dodatkowo wyraźnie widać, że zostawienie usuniętych wcześniej zmiennych poprawiło średnią dokładność każdego z modeli. Kolejność modeli w zależności od użytego zbioru od najdokładniejszego do najmniej dokładnego również jest podobna - jedynie model svm okazał się minimalnie lepszy i wyprzedził model mlp w przypadku modeli zbudowanych za pomocą zbioru z większą ilością zmiennych.
+
+## Stworzenie najlepszych modeli o parametrach wybranych przez przeszukiwanie siatki
+
+Ostatecznie decyduję się na stworzenie dwóch modeli lasu losowego dla każdego zbioru, ponieważ w każdym zestawieniu radził on sobie najlepiej. Jako `model1` będę od teraz oznaczał model bez dodatkowych zmiennych, drugi natomiast będzie oznaczany jako `model2`.
 
 ```{r}
 best_results <- 
   grid_results %>% 
   extract_workflow_set_result("random_forest") %>% 
   select_best(metric = "bal_accuracy")
+  
+best_results2 <- 
+  grid_results2 %>% 
+  extract_workflow_set_result("random_forest") %>% 
+  select_best(metric = "bal_accuracy")
 ```
 
+:::: columns
+::: column
+
+**Model1**
 ```{r echo=FALSE}
-best_results
+best_results %>% 
+  select(mtry, trees, min_n)
 ```
+:::
 
-Model lasu losowego wybrany metodą przeszukiwania siatki ma parametry:
+::: column
+**Model2**
+```{r echo=FALSE}
+best_results2 %>% 
+  select(mtry, trees, min_n)
+```
+:::
+::::
+
+Model lasu losowego wybrane metodą przeszukiwania siatki mają kolejno parametry:
 
 -   `mtry` = 3,
 
 -   `trees` = 1871,
 
--   `min_n` = 5.
+-   `min_n` = 5
+
+dla `Model1` oraz 
+
+-   `mtry` = 6,
+
+-   `trees` = 1927,
+
+-   `min_n` = 5
+
+dla `Model2`.
 
 ```{r}
 best_model_random_forest <- rand_forest(trees = best_results$trees,
@@ -1111,9 +1291,17 @@ best_model_random_forest <- rand_forest(trees = best_results$trees,
                              min_n = best_results$min_n) %>%
   set_engine("ranger", importance = "impurity") %>% 
   set_mode("classification")
+  
+best_model_random_forest2 <- rand_forest(trees = best_results2$trees,
+                             mtry = best_results2$mtry,
+                             min_n = best_results2$min_n) %>%
+  set_engine("ranger", importance = "impurity") %>% 
+  set_mode("classification")
 ```
 
 ## Sprawdzenie dokładności modelu na zbiorze testowym
+
+Ostatecznie o tym, który model spisuje się dokładniej i jaka jest faktyczna zdolność predykcyjna zbudowanych modeli można się przekonać sprawdzając ich zdolności na zbiorze testowym.
 
 ```{r}
 rf_wflow <- 
@@ -1124,6 +1312,15 @@ rf_wflow <-
 rf_fit <- 
   rf_wflow %>% 
   fit(data = spotify_train)
+  
+rf_wflow2 <- 
+  workflow() %>% 
+  add_model(best_model_random_forest2) %>% 
+  add_recipe(basic_recipe2)
+
+rf_fit2 <- 
+  rf_wflow2 %>% 
+  fit(data = spotify_train2)
 ```
 
 ```{r}
@@ -1134,15 +1331,38 @@ metrics_set <- metric_set(accuracy, bal_accuracy, precision, recall, sensitivity
 
 metrics_test <- metrics_set(test_pred,
                     truth = genre, estimate = .pred_class)
+  
+test_pred2 <- predict(rf_fit2, new_data = spotify_test2) %>%
+  bind_cols(spotify_test2) 
+
+metrics_test2 <- metrics_set(test_pred2,
+                    truth = genre, estimate = .pred_class)
 ```
 
+:::: columns
+::: column
+
+**Model1**
 ```{r echo=FALSE}
 metrics_test
 ```
+:::
+::: column
+**Model2**
+```{r echo=FALSE}
+metrics_test2
+```
+:::
+::::
 
-Zbalansowana dokładność na zbiorze testowym na poziomie 0.847 jest całkiem zadowalająca. Oznacza, że wybrany model posiada dobre zdolności generalizacyjne. Zweryfikujmy jak sobie poradził za w konkretnych przypadkach za pomocą macierzy konfuzji.
+Przy porównaniu metryk na zbiorach testowych ostatecznie widać, że `Model2` ma lepsze zdolności generalizacyjne. Wartość metryki `bal_accuracy` wynosząca 0.87 jest zadowalająca i oznacza, że model dobrze radzi sobie na danych, których wcześniej nie widział. Różnica między metrykami obydwu modeli nie jest bardzo duża, jednak z pewnością będzie zauważalna na macierzy klasyfikacji.
 
 ```{r echo=FALSE}
+#| label: fig-confmat
+#| layout-ncol: 2
+#| column: page
+
+
 cfm <- table(test_pred$genre, test_pred$.pred_class)
 cfm_df <- as.data.frame(cfm)
 names(cfm_df) <- c("Truth", "Prediction", "Freq")
@@ -1152,7 +1372,23 @@ ggplot(cfm_df, aes(x = Prediction, y = Truth, fill = Freq)) +
   geom_tile(color = "white") +
   geom_text(aes(label = Freq), vjust = 0.5, color = "white", size = 5) + 
   scale_fill_gradient(low = "lightblue", high = "blue") +  
-  labs(title = "Confusion Matrix", x = "Predicted Label",
+  labs(title = "Confusion Matrix Model1", x = "Predicted Label",
+       y = "Actual Label") +
+  theme_minimal() +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14),
+        plot.title = element_text(hjust = 0.5))
+  
+cfm2 <- table(test_pred2$genre, test_pred2$.pred_class)
+cfm_df2 <- as.data.frame(cfm2)
+names(cfm_df2) <- c("Truth", "Prediction", "Freq")
+
+# Visualization
+ggplot(cfm_df2, aes(x = Prediction, y = Truth, fill = Freq)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = Freq), vjust = 0.5, color = "white", size = 5) + 
+  scale_fill_gradient(low = "lightblue", high = "blue") +  
+  labs(title = "Confusion Matrix Model2", x = "Predicted Label",
        y = "Actual Label") +
   theme_minimal() +
   theme(axis.text = element_text(size = 12),
@@ -1160,7 +1396,7 @@ ggplot(cfm_df, aes(x = Prediction, y = Truth, fill = Freq)) +
         plot.title = element_text(hjust = 0.5))
 ```
 
-Z powyższego wykresu można wysnuć wiele ciekawych wniosków. Model aż najwięcej, bo aż 12 razy, pomylił blues z jazzem, co jest dosyć zrozumiałym błędem zważając na podobieństwo tych gatunków. Rock i country zostało pomylone z największą ilością gatunków. Hip-hop, jeżeli był mylnie klasyfikowany, to tylko jako reggae. Dzięki temu, że nie usunąłem ze zbioru zmiennej określającej tytuł piosenki mogę teraz dokładniej przyjrzeć się poszczególnym błędom. Najbardziej przykuł moją uwagę jeden utwór jazzowy, który został pomylony z utworem metalowym.
+Z powyższego wykresu można wysnuć wiele ciekawych wniosków. Model najczęściej, bo aż 12 razy, pomylił blues z jazzem, co jest dosyć zrozumiałym błędem zważając na podobieństwo tych gatunków. Rock i country zostało pomylone z największą ilością gatunków. Hip-hop, jeżeli był mylnie klasyfikowany, to tylko jako reggae. Dzięki temu, że nie usunąłem ze zbioru zmiennej określającej tytuł piosenki mogę teraz dokładniej przyjrzeć się poszczególnym błędom. Najbardziej przykuł moją uwagę jeden utwór jazzowy, który został pomylony z utworem metalowym.
 
 ```{r echo=FALSE}
 wrong_pred <- test_pred %>% 
@@ -1215,3 +1451,6 @@ f_imp
 ```
 
 Z powyższego wykresu można zauważyć, że najważniejszą cechą przy podziałach stosowanych w tworzeniu optymalnego modelu lasu losowego było `energy`, `danceability` oraz `danceability`. Najmniej przydały się natomiast zmienne `key`, `mode` oraz `time_signature`, co nie jest zaskoczeniem, ponieważ gatunki nigdy nie ogarniczają się do konkretnych skal ani struktur.
+
+
+
