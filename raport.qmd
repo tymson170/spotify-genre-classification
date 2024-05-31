@@ -766,14 +766,6 @@ P-wartość przeprowadzonego testu wskazuje na to, że nie ma podstaw do odrzuce
 
 ## Korelacja pomiędzy zmiennymi niezależnymi ciągłymi
 
-```{r}
-df %>% 
-  select(where(is.factor)) %>% 
-  sapply(as.numeric) %>% 
-  cor(method = "spearman") %>% 
-  corPlot(cex = 0.5, xlas = 2)
-```
-
 ```{r echo=FALSE}
 df %>% 
   select(where(is.numeric)) %>%
