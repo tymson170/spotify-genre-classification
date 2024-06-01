@@ -1,12 +1,17 @@
 ---
 title: "Klasyfikacja gatunku za pomocą metadanych Spotify"
-format: html
+format: 
+  html: 
+    toc: true
+    include-after-body:
+      file: toc.html
 editor: visual
 editor_options: 
   chunk_output_type: console
 execute: 
   warning: false
-toc: true
+code-fold: show
+code-tools: true
 ---
 
 ```{r echo=FALSE}
@@ -1032,7 +1037,7 @@ registerDoSEQ()
 grid_results <- readRDS("grid_results_tune_changed_ts.rds")
 ```
 
-Za pomocą tych samych kroków znajdę również najlepsze parametry dla zbioru, w którym nie usunąłem zmiennych `loudness` i `acousticness`.
+Za pomocą tych samych kroków znajdę również najlepsze parametry dla zbioru, w którym nie usunąłem zmiennych `loudness` i `acousticness`. Podział danych na zbiór treningowy i testowy będzie taki sam, dzięki czemu będzie można zobaczyć gdzie modele się różniły.
 
 ```{r}
 #| code-fold: true
@@ -1076,7 +1081,6 @@ all_workflows2 <- bind_rows(basic2, dummy2, transform2) %>%
   mutate(wflow_id = gsub("(basic_)|(dummy_)|(transform_)", "", wflow_id))
 ```
 
-
 ```{r eval=FALSE}
 #| code-fold: true
 
@@ -1101,7 +1105,6 @@ stopCluster(cl)
 registerDoSEQ()
 ```
 
-
 ```{r echo=FALSE}
 # saveRDS(grid_results2, "grid_results_tune_wla.rds")
 grid_results2 <- readRDS("grid_results_tune_wla.rds")
@@ -1109,10 +1112,10 @@ grid_results2 <- readRDS("grid_results_tune_wla.rds")
 
 ## Wyniki tuningu
 
-:::: columns
+::: columns
 ::: column
-
 **Zbiór bez `loudness` i `acousticness`**
+
 ```{r echo=FALSE}
 grid_results %>% 
    rank_results() %>% 
@@ -1120,9 +1123,10 @@ grid_results %>%
   head()
 ```
 :::
-::: column
 
+::: column
 **Zbiór z tymi zmiennymi**
+
 ```{r echo=FALSE}
 grid_results2 %>% 
    rank_results()%>% 
@@ -1130,14 +1134,14 @@ grid_results2 %>%
   head()
 ```
 :::
-::::
+:::
 
 Wygląda na to, że według każdej metryki model lasu losowego okazuje się być najlepszy. Dodatkowo wygląda na to, że model zbudowany na podstawie zbioru ze zmiennymi `loudness` i `acousticness` jest minimalnie lepszy.
 
-:::: columns
-:::column
-
+::: columns
+::: column
 **Zbiór bez `loudness` i `acousticness`**
+
 ```{r echo=FALSE}
 grid_results %>% 
    rank_results() %>% 
@@ -1146,9 +1150,10 @@ grid_results %>%
   head()
 ```
 :::
-::: column
 
+::: column
 **Zbiór z tymi zmiennymi**
+
 ```{r echo=FALSE}
 grid_results2 %>% 
    rank_results() %>% 
@@ -1157,10 +1162,9 @@ grid_results2 %>%
   head() 
 ```
 :::
-::::
+:::
 
-
-Po przyjęciu za główną metrykę porównawczą `balanced accuracy` model lasu losowego również zdecydowanie wygląda na najlepszy. Można więc na tym etapie przypuszczać, że wyeliminowanie korelacji nie wpłynęło na poprawę modelu, a nawet nieznacznie ją pogorszyło, co jednak zweryfikuję później ostatecznie sprawdzając dokładność każdego z modeli na zbiorze testowym. 
+Po przyjęciu za główną metrykę porównawczą `balanced accuracy` model lasu losowego również zdecydowanie wygląda na najlepszy. Można więc na tym etapie przypuszczać, że wyeliminowanie korelacji nie wpłynęło na poprawę modelu, a nawet nieznacznie ją pogorszyło, co jednak zweryfikuję później ostatecznie sprawdzając dokładność każdego z modeli na zbiorze testowym.
 
 ```{r echo=FALSE}
 #| label: fig-per
@@ -1190,9 +1194,8 @@ lims(y = c(0.6, 0.9)) +
 theme(legend.position = "none")
 ```
 
-:::: columns
+::: columns
 ::: column
-
 ```{r echo=FALSE}
 grid_results %>% 
    rank_results() %>% 
@@ -1205,8 +1208,8 @@ grid_results %>%
   arrange(-bal_accuracy)
 ```
 :::
-::: column
 
+::: column
 ```{r echo=FALSE}
 grid_results2 %>% 
    rank_results() %>% 
@@ -1219,8 +1222,7 @@ grid_results2 %>%
   arrange(-bal_accuracy)
 ```
 :::
-::::
-
+:::
 
 Zestawienie najlepszego modelu każdego rodzaju potwierdza, że w naszym zadaniu najlepiej poradziły sobie modele "drzewiaste", najsłabiej natomiast spisał się naiwny klasyfikator bayesowski. Dodatkowo wyraźnie widać, że zostawienie usuniętych wcześniej zmiennych poprawiło średnią dokładność każdego z modeli. Kolejność modeli w zależności od użytego zbioru od najdokładniejszego do najmniej dokładnego również jest podobna - jedynie model svm okazał się minimalnie lepszy i wyprzedził model mlp w przypadku modeli zbudowanych za pomocą zbioru z większą ilością zmiennych.
 
@@ -1240,10 +1242,10 @@ best_results2 <-
   select_best(metric = "bal_accuracy")
 ```
 
-:::: columns
+::: columns
 ::: column
-
 **Model1**
+
 ```{r echo=FALSE}
 best_results %>% 
   select(mtry, trees, min_n)
@@ -1252,12 +1254,13 @@ best_results %>%
 
 ::: column
 **Model2**
+
 ```{r echo=FALSE}
 best_results2 %>% 
   select(mtry, trees, min_n)
 ```
 :::
-::::
+:::
 
 Model lasu losowego wybrane metodą przeszukiwania siatki mają kolejno parametry:
 
@@ -1267,7 +1270,7 @@ Model lasu losowego wybrane metodą przeszukiwania siatki mają kolejno parametr
 
 -   `min_n` = 5
 
-dla `Model1` oraz 
+dla `Model1` oraz
 
 -   `mtry` = 6,
 
@@ -1331,26 +1334,31 @@ metrics_test2 <- metrics_set(test_pred2,
                     truth = genre, estimate = .pred_class)
 ```
 
-:::: columns
+::: columns
 ::: column
-
 **Model1**
+
 ```{r echo=FALSE}
 metrics_test
 ```
 :::
+
 ::: column
 **Model2**
+
 ```{r echo=FALSE}
 metrics_test2
 ```
 :::
-::::
+:::
 
 Przy porównaniu metryk na zbiorach testowych ostatecznie widać, że `Model2` ma lepsze zdolności generalizacyjne. Wartość metryki `bal_accuracy` wynosząca 0.87 jest zadowalająca i oznacza, że model dobrze radzi sobie na danych, których wcześniej nie widział. Różnica między metrykami obydwu modeli nie jest bardzo duża, jednak z pewnością będzie zauważalna na macierzy klasyfikacji.
 
 ```{r echo=FALSE}
 #| label: fig-confmat
+#| fig-subcap:
+#|   - "Model1"
+#|   - "Model2"
 #| layout-ncol: 2
 #| column: page
 
@@ -1394,6 +1402,10 @@ Z powyższego wykresu można wysnuć wiele ciekawych wniosków. Model najczęśc
 wrong_pred <- test_pred %>% 
   select(track.name, genre, .pred_class) %>% 
   filter(genre != .pred_class)
+
+wrong_pred2 <- test_pred2 %>% 
+  select(track.name, genre, .pred_class) %>% 
+  filter(genre != .pred_class)
 ```
 
 ```{r echo=FALSE}
@@ -1419,11 +1431,27 @@ wrong_pred %>%
 Okazuje się, że jest to "Pneuma" zespołu Tool. Również i tutaj po zastanowieniu można zrozumieć pomyłkę. Jest to utwór długi, z małą ilością wokali i o stale zmieniającym się metrum muzycznym, co można przypisać niejednemu utworowi klasycznemu.
 
 ```{r}
+#| label: fig-roc
+#| fig-subcap:
+#|   - "Model1"
+#|   - "Model2"
+#| layout-ncol: 2
+#| column: page
+
+
 rf_wflow %>% 
   last_fit(split) %>% 
   collect_predictions() %>% 
   roc_curve(truth = genre, .pred_blues, .pred_classical, .pred_country, .pred_folk, .pred_hiphop, .pred_jazz, .pred_metal, .pred_reggae, .pred_rock) %>% 
-  autoplot()
+  autoplot() + labs(title = "Model1") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+rf_wflow2 %>% 
+  last_fit(split2) %>% 
+  collect_predictions() %>% 
+  roc_curve(truth = genre, .pred_blues, .pred_classical, .pred_country, .pred_folk, .pred_hiphop, .pred_jazz, .pred_metal, .pred_reggae, .pred_rock) %>% 
+  autoplot() + labs(title = "Model2") +
+  theme(plot.title = element_text(hjust = 0.5))
 ```
 
 Z krzywych ROC stworzonych za pomocą metody one vs. all dla każdego gatunku można znaleźć potwierdzenie tego, co można było zobaczyć już na macierzy konfucji - model najlepiej radził sobie z przewidywaniem metalu i hiphopu, natomiast najgorzej radził sobie z klasyfikacją bluesa, rocka i country.
@@ -1436,13 +1464,26 @@ f_imp <-
   last_fit(split) %>% 
   extract_fit_parsnip() %>% 
   vip(num_features = 13)
+
+f_imp2 <- 
+  rf_wflow2 %>% 
+  last_fit(split2) %>% 
+  extract_fit_parsnip() %>% 
+  vip(num_features = 15)
 ```
 
 ```{r echo=FALSE}
-f_imp
+#| label: fig-featimp
+#| fig-subcap:
+#|   - "Model1"
+#|   - "Model2"
+#| layout-ncol: 2
+#| column: page
+
+f_imp + labs(title = "Model1") +
+  theme(plot.title = element_text(hjust = 0.5))
+f_imp2 + labs(title = "Model2") +
+  theme(plot.title = element_text(hjust = 0.5))
 ```
 
 Z powyższego wykresu można zauważyć, że najważniejszą cechą przy podziałach stosowanych w tworzeniu optymalnego modelu lasu losowego było `energy`, `danceability` oraz `danceability`. Najmniej przydały się natomiast zmienne `key`, `mode` oraz `time_signature`, co nie jest zaskoczeniem, ponieważ gatunki nigdy nie ogarniczają się do konkretnych skal ani struktur.
-
-
-
