@@ -1,6 +1,10 @@
 library(spotifyr)
 library(tidyverse)
 
+Sys.setenv(SPOTIFY_CLIENT_ID = '***')
+Sys.setenv(SPOTIFY_CLIENT_SECRET = '***')
+Sys.setenv(SPOTIFY_REDIRECT_URI = '***')
+
 playlist_names <- c(
   "Blues Classics", "Blues Standards", "Electric Blues Classics", "Classic Blues Guitar",
   "Classical Essentials", "Classical New Releases", 
