@@ -174,7 +174,7 @@ df <- file %>%
 Zestaw cech po wstępnej selekcji wyglądał zatem następująco
 
 | Cecha                      | Opis                                                                                                                   |
-|-----------------|-------------------------------------------------------|
+|------------------|------------------------------------------------------|
 | `playlist_name`            | Nazwa playlisty, z której pochodzi utwór                                                                               |
 | `danceability`             | "Taneczność" utworu - zmienna ciągła przyjmująca wartości w przedziale \[0, 1\]                                        |
 | `energy`                   | Energiczność utworu - zmienna ciągła przyjmująca wartości w przedziale \[0, 1\]                                        |
@@ -334,7 +334,9 @@ Statystyki opisowe dla zmiennych ciągłych również obrazują kilka anomalii w
 
 ### Usunięcie wiersza z zerowym tempem
 
-```{r echo=FALSE}
+```{r}
+#| code-fold: true
+
 df[df$tempo < 40, ] %>% kable("html") %>% kable_styling("striped")
 ```
 
@@ -348,7 +350,9 @@ df <- df %>%
 ### Rezygnacja ze zmiennej `popularity`
 
 ```{r}
-ggplot(df, aes(x = track.popularity)) + geom_histogram(bins = 30, fill = "#F8766D")
+#| code-fold: true
+
+ggplot(df, aes(x = track.popularity)) + geom_histogram(bins = 30, fill = "#F8766D") + labs(title = "Histogram zmiennej `popularity`")
 ```
 
 Wyświetlenie histogramu zmiennej `popularity` pozwala zauważyć, że mamy bardzo dużo zmiennych o popularności równej lub bliskiej 0. Sprawdźmy, ile wierszy ma "zerową" popularność.
@@ -445,9 +449,9 @@ table(df$track.explicit) %>%
   kable_styling("striped")
 ```
 
-### Kodowanie zmiennych kategorialnych
+### Kodowanie zmiennych kategorycznych
 
-Zmienne, które przyjmują ograniczoną liczbę wartości, należy odpowiednio zakodować jako zmienne kategoryczne.
+Zmienne, które przyjmują ograniczoną liczbę wartości, odpowiednio zakodowałem jako zmienne kategoryczne.
 
 ```{r}
 df$genre <- factor(df$genre)
@@ -498,7 +502,7 @@ Statystyki opisowe również nie wykazują żadnych nieprawidłowości w zbiorze
 ## Rozkłady zmiennych
 
 ::: panel-tabset
-#### Zmienne kategorialne
+#### Zmienne kategoryczne
 
 ::: panel-tabset
 ##### Gatunek
@@ -678,7 +682,7 @@ geom_text(aes(label = paste0(round(n/all*100, 2), "%")), position = position_dod
 labs(caption = "Wartości na słupkach oznaczają stosunek utworów wulgarnych do wszystkich utworów w danym gatunku") + theme(plot.caption = element_text(hjust = 0))
 ```
 
-Nie jest zaskoczeniem fakt, że najwięcej utworów zawierających treści wulgarne pochodzi z gatunku hip-hop (zawiera je aż prawie 90% utworów z tego gatunku).
+Nie jest zaskoczeniem fakt, że najwięcej utworów zawierających treści wulgarne pochodzi z gatunku hip-hop (zawiera je aż prawie 90% utworów z tego gatunku). Kolejny w kolejność jest metal, ponad 1/5 gatunków z tego utworu zawiera treści nieodpowiednie dla młodych odbiorców. Jedynymi gatunkami, w których nie ma żadnych wulgaryzmów są blues, muzyka klasyczna i jazz.
 
 ## Energiczność vs. głośność utworów
 
@@ -696,7 +700,7 @@ ggplot(df, aes(x = danceability, y = valence, colour = genre)) + geom_point()
 
 Czy to, że utwór jest bardziej pozytywny oznacza, że nadaje się również bardziej do tańczenia? Powyższy wykres pokazuje, że jest w tym trochę prawdy.Można zauważywć, że najbardziej tanecznym i pozytywnym gatunkiem jest reggae. Może natomiast dziwić fakt, iż wygląda na to, że wiele utworów klasycznych ze zbioru nie nadaje się do tańca i jest wyjątkowo depresyjna.
 
-## Głośność utworów
+## Głośność utworów na przestrzeni lat
 
 ```{r echo=FALSE}
 df %>% 
@@ -712,7 +716,7 @@ Ciekawym faktem jest to, że w więkoszści gatunków utwory stawały się gło�
 ## Rozkłady czasu trwania utworów
 
 ```{r echo=FALSE}
-ggplot(df, aes(y = track.duration_s/60, x = genre, fill = genre)) + geom_boxplot() + theme(legend.position = "") + ylab("Track length (minutes)")
+ggplot(df, aes(y = track.duration_s, x = genre, fill = genre)) + geom_boxplot() + theme(legend.position = "") + ylab("Track length")
 ```
 
 Patrząc na wykresy pudełkowe długości piosenek w zależności od gatunku można podejrzewać, że jest szansa na to, że niektóre rozkłady są do siebie zbliżone. Żeby sprawdzić to sprawdzić zamierzam przeprowadzić test ANOVA. Najpierw sprawdzam jednak wymagane założenia o wielowymiarowej normalności w grupach, zbalansowaniu grup i ich homogeniczności.
@@ -735,7 +739,7 @@ Wygląda na to, że żadne z założeń nie jest spełnione, zatem przeprowadzę
 kruskal.test(track.duration_s ~ genre, df)
 ```
 
-Test ten wykazał, że należy odrzucić hipotezę mówiącą o tym, że średnie długości piosenek w gatunkach są na takim samym poziomie. Żeby sprawdzić, które z nich się różnią pomiędzy sobą, przeprowadzę test Dunna z poprawką Bonferroni'ego.
+Test ten wykazał, że należy odrzucić hipotezę mówiącą o tym, że średnie długości piosenek w gatunkach są na takim samym poziomie. Żeby sprawdzić, które z nich się różnią pomiędzy sobą, przeprowadzę test Dunna.
 
 ```{r}
 dunntest <- dunn_test(df, track.duration_s ~ genre, p.adjust.method = "bonferroni")
@@ -1168,10 +1172,6 @@ grid_results2 %>%
 Po przyjęciu za główną metrykę porównawczą `balanced accuracy` model lasu losowego również zdecydowanie wygląda na najlepszy. Można więc na tym etapie przypuszczać, że wyeliminowanie korelacji nie wpłynęło na poprawę modelu, a nawet nieznacznie ją pogorszyło, co jednak zweryfikuję później ostatecznie sprawdzając dokładność każdego z modeli na zbiorze testowym.
 
 ```{r echo=FALSE}
-#| label: fig-per
-#| fig-subcap:
-#|   - "Zbiór bez `loudness` i `acousticness`"
-#|   - "Zbiór z tymi zmiennymi"
 #| layout-ncol: 2
 #| column: page
 
@@ -1183,7 +1183,7 @@ autoplot(
    select_best = TRUE) + 
 geom_text(aes(y = mean - 0.03, label = wflow_id), angle = 90, hjust = 1) +
 lims(y = c(0.6, 0.9)) +
-theme(legend.position = "none")
+theme(legend.position = "none") + labs(title = "Zbiór bez `loudness` i `acousticness`")
   
 autoplot(
    grid_results2,
@@ -1192,7 +1192,7 @@ autoplot(
    select_best = TRUE) + 
 geom_text(aes(y = mean - 0.03, label = wflow_id), angle = 90, hjust = 1) +
 lims(y = c(0.6, 0.9)) +
-theme(legend.position = "none")
+theme(legend.position = "none") + labs(title = "Zbiór z tymi zmiennymi")
 ```
 
 ::: columns
@@ -1358,10 +1358,6 @@ Przy porównaniu metryk na zbiorach testowych ostatecznie widać, że `Model2` m
 ### Macierze klasyfikacji
 
 ```{r echo=FALSE}
-#| label: fig-confmat
-#| fig-subcap:
-#|   - "Model1"
-#|   - "Model2"
 #| layout-ncol: 2
 #| column: page
 
@@ -1442,19 +1438,29 @@ wrong_pred2 %>%
   kable_styling("striped")
 ```
 
-{{< https://www.youtube.com/watch?v=NHN6-yWFKPc >}}
+{{< video https://www.youtube.com/watch?v=NHN6-yWFKPc >}}
 
 Po jego wysłuchaniu również można zrozumieć pomyłkę. Jest to zdecydowanie utwór jazzowy, jednak brzmi on też jednocześnie trochę jak "piosenka z westernu".
 
 Są tu też obecne pomyłki, dla których nie ma żadnego logicznego wyjaśnienia, jak sklasyfikowanie utworu Linkin Park "What I've Done" jako country, czy kompozycji Vivaldi'ego jako reggae.
 
+```{r echo=FALSE}
+wrong_pred2 %>% 
+  filter(genre == "metal" & .pred_class == "country") %>%
+  kable("html") %>% 
+  kable_styling("striped")
+```
+
+```{r echo=FALSE}
+wrong_pred2 %>% 
+  filter(genre == "classical" & .pred_class == "reggae") %>%
+  kable("html") %>% 
+  kable_styling("striped")
+```
+
 ### Wykresy krzywych ROC
 
 ```{r}
-#| label: fig-roc
-#| fig-subcap:
-#|   - "Model1"
-#|   - "Model2"
 #| layout-ncol: 2
 #| column: page
 
@@ -1493,10 +1499,6 @@ f_imp2 <-
 ```
 
 ```{r echo=FALSE}
-#| label: fig-featimp
-#| fig-subcap:
-#|   - "Model1"
-#|   - "Model2"
 #| layout-ncol: 2
 #| column: page
 
