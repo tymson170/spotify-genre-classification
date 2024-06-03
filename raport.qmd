@@ -83,10 +83,6 @@ Serwis **FreeDB** jest darmową bazą danych niegdyś służącą osobom wypalaj
 API Spotify umożliwia jednoczesne pobranie danych dla wszystkich utworów z wybranego albumu, profilu artysty lub playlisty. W celu stworzenia zbioru danych wyszukałem więc w serwisie po kilka playlist zawierających utwory danego gatunku tak, żeby na jeden gatunek przypadało 200-300 obserwacji i zbiór był możliwie zrównoważony, a następnie wyniki złączyłem w jedną ramkę danych.
 
 ```{r eval=FALSE}
-Sys.setenv(SPOTIFY_CLIENT_ID = '8e358bf3471a4232babc75cfae3ffffc')
-Sys.setenv(SPOTIFY_CLIENT_SECRET = '34b94c88be5a4eba98dad34d17b68f22')
-Sys.setenv(SPOTIFY_REDIRECT_URI = 'http://localhost:3036')
-
 playlist_names <- c(
   "Blues Classics", "Blues Standards", "Electric Blues Classics", "Classic Blues Guitar",
   "Classical Essentials", "Classical New Releases", 
@@ -175,7 +171,7 @@ df <- file %>%
 Zestaw cech po wstępnej selekcji wyglądał zatem następująco
 
 | Cecha                      | Opis                                                                                                                   |
-|--------------------|----------------------------------------------------|
+|---------------------|---------------------------------------------------|
 | `playlist_name`            | Nazwa playlisty, z której pochodzi utwór                                                                               |
 | `danceability`             | "Taneczność" utworu - zmienna ciągła przyjmująca wartości w przedziale \[0, 1\]                                        |
 | `energy`                   | Energiczność utworu - zmienna ciągła przyjmująca wartości w przedziale \[0, 1\]                                        |
