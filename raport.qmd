@@ -1,5 +1,6 @@
 ---
 title: "Klasyfikacja gatunku za pomocą metadanych Spotify"
+author: "Tymoteusz Romanowicz"
 format: 
   html: 
     toc: true
@@ -174,7 +175,7 @@ df <- file %>%
 Zestaw cech po wstępnej selekcji wyglądał zatem następująco
 
 | Cecha                      | Opis                                                                                                                   |
-|------------------|------------------------------------------------------|
+|-------------------|-----------------------------------------------------|
 | `playlist_name`            | Nazwa playlisty, z której pochodzi utwór                                                                               |
 | `danceability`             | "Taneczność" utworu - zmienna ciągła przyjmująca wartości w przedziale \[0, 1\]                                        |
 | `energy`                   | Energiczność utworu - zmienna ciągła przyjmująca wartości w przedziale \[0, 1\]                                        |
