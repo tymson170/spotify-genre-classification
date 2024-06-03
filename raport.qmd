@@ -12,6 +12,7 @@ execute:
   warning: false
 code-fold: show
 code-tools: true
+embed-resources: true
 ---
 
 ```{r echo=FALSE}
@@ -81,61 +82,61 @@ Serwis **FreeDB** jest darmową bazą danych niegdyś służącą osobom wypalaj
 API Spotify umożliwia jednoczesne pobranie danych dla wszystkich utworów z wybranego albumu, profilu artysty lub playlisty. W celu stworzenia zbioru danych wyszukałem więc w serwisie po kilka playlist zawierających utwory danego gatunku tak, żeby na jeden gatunek przypadało 200-300 obserwacji i zbiór był możliwie zrównoważony, a następnie wyniki złączyłem w jedną ramkę danych.
 
 ```{r eval=FALSE}
-# Sys.setenv(SPOTIFY_CLIENT_ID = '8e358bf3471a4232babc75cfae3ffffc')
-# Sys.setenv(SPOTIFY_CLIENT_SECRET = '34b94c88be5a4eba98dad34d17b68f22')
-# Sys.setenv(SPOTIFY_REDIRECT_URI = 'http://localhost:3036')
-# 
-# playlist_names <- c(
-#   "Blues Classics", "Blues Standards", "Electric Blues Classics", "Classic Blues # Guitar",
-#   "Classical Essentials", "Classical New Releases", 
-#   "Country's Greatest Hits", "Hot Country", "Country Top 50", 
-#   "Fresh Folk", "Roots Rising", 
-#   "jazz classics the best tunes in jazz history", 
-#   "Hip-Hop Drive", "Gold School", "RAP GENERACJA",
-#   "Reggae Classics", "Summer Sunshine Reggae", "celebrating the film bob marley # one love", "Reggae Party", 
-#   "Rock Classics", "All New Rock",
-#   "Metal Essentials", "00s Metal Classics", "10s Metal Classics"
-#   )
-# 
-# pb <- txtProgressBar(min = 0,
-#                      max = length(playlist_names),
-#                      style = 3,
-#                      width = 50,
-#                      char = "=") 
-# 
-# dataset <- NULL
-# 
-# for (p in 1:length(playlist_names)) {
-#   
-#   search_results <- search_spotify(
-#     q = playlist_names[p], 
-#     type = c("playlist"), 
-#     authorization = get_spotify_access_token()
-#   )
-#   
-#   playlist_id <- search_results %>%  
-#     select(id, name, uri) %>% 
-#     slice_head(n = 1) %>% 
-#     select(id) %>% 
-#     pull()
-#   
-#   p_dt <- get_playlist_audio_features(
-#     username = "Spotify",
-#     playlist_uris = c(playlist_id), 
-#   )
-#   
-#   if (p == 1) {
-#     dataset <- p_dt
-#   }
-#   else {
-#     dataset <- rbind(dataset, p_dt)
-#   }
-# 
-#   setTxtProgressBar(pb, p)
-# }
-# 
-# df <- as.data.frame(dataset)
-# df <- df[,-which(sapply(df, class) == "list")]
+Sys.setenv(SPOTIFY_CLIENT_ID = '8e358bf3471a4232babc75cfae3ffffc')
+Sys.setenv(SPOTIFY_CLIENT_SECRET = '34b94c88be5a4eba98dad34d17b68f22')
+Sys.setenv(SPOTIFY_REDIRECT_URI = 'http://localhost:3036')
+
+playlist_names <- c(
+  "Blues Classics", "Blues Standards", "Electric Blues Classics", "Classic Blues Guitar",
+  "Classical Essentials", "Classical New Releases", 
+  "Country's Greatest Hits", "Hot Country", "Country Top 50", 
+  "Fresh Folk", "Roots Rising", 
+  "jazz classics the best tunes in jazz history", 
+  "Hip-Hop Drive", "Gold School", "RAP GENERACJA",
+  "Reggae Classics", "Summer Sunshine Reggae", "celebrating the film bob marley one love", "Reggae Party", 
+  "Rock Classics", "All New Rock",
+  "Metal Essentials", "00s Metal Classics", "10s Metal Classics"
+  )
+
+pb <- txtProgressBar(min = 0,
+                     max = length(playlist_names),
+                     style = 3,
+                     width = 50,
+                     char = "=") 
+
+dataset <- NULL
+
+for (p in 1:length(playlist_names)) {
+  
+  search_results <- search_spotify(
+    q = playlist_names[p], 
+    type = c("playlist"), 
+    authorization = get_spotify_access_token()
+  )
+  
+  playlist_id <- search_results %>%  
+    select(id, name, uri) %>% 
+    slice_head(n = 1) %>% 
+    select(id) %>% 
+    pull()
+  
+  p_dt <- get_playlist_audio_features(
+    username = "Spotify",
+    playlist_uris = c(playlist_id), 
+  )
+  
+  if (p == 1) {
+    dataset <- p_dt
+  }
+  else {
+    dataset <- rbind(dataset, p_dt)
+  }
+
+  setTxtProgressBar(pb, p)
+}
+
+df <- as.data.frame(dataset)
+df <- df[,-which(sapply(df, class) == "list")]
 
 # write.csv(df, "spotify-genres-classification.csv")
 # write.csv(df, "spotify-genres-classification-new.csv")
@@ -173,7 +174,7 @@ df <- file %>%
 Zestaw cech po wstępnej selekcji wyglądał zatem następująco
 
 | Cecha                      | Opis                                                                                                                   |
-|------------------------------------|------------------------------------|
+|-----------------|-------------------------------------------------------|
 | `playlist_name`            | Nazwa playlisty, z której pochodzi utwór                                                                               |
 | `danceability`             | "Taneczność" utworu - zmienna ciągła przyjmująca wartości w przedziale \[0, 1\]                                        |
 | `energy`                   | Energiczność utworu - zmienna ciągła przyjmująca wartości w przedziale \[0, 1\]                                        |
@@ -1354,6 +1355,8 @@ metrics_test2
 
 Przy porównaniu metryk na zbiorach testowych ostatecznie widać, że `Model2` ma lepsze zdolności generalizacyjne. Wartość metryki `bal_accuracy` wynosząca 0.87 jest zadowalająca i oznacza, że model dobrze radzi sobie na danych, których wcześniej nie widział. Różnica między metrykami obydwu modeli nie jest bardzo duża, jednak z pewnością będzie zauważalna na macierzy klasyfikacji.
 
+### Macierze klasyfikacji
+
 ```{r echo=FALSE}
 #| label: fig-confmat
 #| fig-subcap:
@@ -1372,12 +1375,13 @@ ggplot(cfm_df, aes(x = Prediction, y = Truth, fill = Freq)) +
   geom_tile(color = "white") +
   geom_text(aes(label = Freq), vjust = 0.5, color = "white", size = 5) + 
   scale_fill_gradient(low = "lightblue", high = "blue") +  
-  labs(title = "Confusion Matrix Model1", x = "Predicted Label",
-       y = "Actual Label") +
+  labs(title = "Macierz klasyfikacji Model1", x = "Wartość przewidywana",
+       y = "Wartość prawdziwa") +
   theme_minimal() +
   theme(axis.text = element_text(size = 12),
         axis.title = element_text(size = 14),
-        plot.title = element_text(hjust = 0.5))
+        plot.title = element_text(hjust = 0.5),
+  legend.position = "none")
   
 cfm2 <- table(test_pred2$genre, test_pred2$.pred_class)
 cfm_df2 <- as.data.frame(cfm2)
@@ -1388,15 +1392,25 @@ ggplot(cfm_df2, aes(x = Prediction, y = Truth, fill = Freq)) +
   geom_tile(color = "white") +
   geom_text(aes(label = Freq), vjust = 0.5, color = "white", size = 5) + 
   scale_fill_gradient(low = "lightblue", high = "blue") +  
-  labs(title = "Confusion Matrix Model2", x = "Predicted Label",
-       y = "Actual Label") +
+  labs(title = "Macierz klasyfikacji Model2", x = "Wartość przewidywana",
+       y = "Wartość prawdziwa") +
   theme_minimal() +
   theme(axis.text = element_text(size = 12),
         axis.title = element_text(size = 14),
         plot.title = element_text(hjust = 0.5))
 ```
 
-Z powyższego wykresu można wysnuć wiele ciekawych wniosków. Model najczęściej, bo aż 12 razy, pomylił blues z jazzem, co jest dosyć zrozumiałym błędem zważając na podobieństwo tych gatunków. Rock i country zostało pomylone z największą ilością gatunków. Hip-hop, jeżeli był mylnie klasyfikowany, to tylko jako reggae. Dzięki temu, że nie usunąłem ze zbioru zmiennej określającej tytuł piosenki mogę teraz dokładniej przyjrzeć się poszczególnym błędom. Najbardziej przykuł moją uwagę jeden utwór jazzowy, który został pomylony z utworem metalowym.
+Tutaj rzeczywiście rzuca się w oczy poprawa modelu o większej ilości zmiennych. Praktycznie każdy gatunek (z wyjątkiem folku i bluesa) ma teraz więcej poprawnie sklasyfikowanych obserwacji.
+
+Z powyższych wykresów można wysnuć wiele ciekawych wniosków:
+
+-   każdy model najczęściej, bo aż 10 razy, pomylił blues z jazzem, co jest dosyć zrozumiałym błędem zważając na podobieństwo między tymi gatunkami
+
+-   w `Model2` `country` zostało pomylone z największą ilością gatunku, ponieważ oprócz rzeczywistej wartości model przewidywał w jego przypadku aż 6 innych gatunków muzycznych
+
+-   hip-hop, jeżeli był mylnie klasyfikowany, to tylko jako reggae.
+
+Dzięki temu, że nie usunąłem ze zbioru zmiennej określającej tytuł piosenki mogę teraz dokładniej przyjrzeć się poszczególnym błędom. Najbardziej przykuł moją uwagę jeden utwór jazzowy, który w `Model1` został pomylony z utworem metalowym.
 
 ```{r echo=FALSE}
 wrong_pred <- test_pred %>% 
@@ -1417,18 +1431,24 @@ wrong_pred %>%
 
 {{< video https://www.youtube.com/watch?v=dYxgci2uPno >}}
 
-Po jego wysłuchaniu staje się zrozumiałe, dlaczego model pomylił się w tym przypadku. Jest to utwór szybki, agresywny i ponury i mimo że jazzowy, to ma on w sobie elementy metalu.
+Po jego wysłuchaniu staje się zrozumiałe, dlaczego model pomylił się w tym przypadku. Jest to utwór szybki, agresywny i ponury i mimo że jazzowy, to ma on w sobie elementy metalu. `Model2` nie popełnił już tego błędu; można podejrzewać, że stało się to za sprawą przywrócenia w zbiorze zmiennej `acousticness` - jest ona bowiem cechą, która zdecydowanie różni pomiędzy sobą te gatunki i najprawdopodobniej informacje, które ze sobą wniosła do `Model2` wyeliminowały tę pomyłkę.
 
-Inną ciekawą pomyłką jest utwór metalowy sklasyfikowany jako utwór muzyki klasycznej.
+Inną pomyłką, którą można wziąć pod lupę jest utwór jazz sklasyfikowany jako country w `Model2`.
 
-```{r}
-wrong_pred %>% 
-  filter(genre == "metal" & .pred_class == "classical") %>%
+```{r echo=FALSE}
+wrong_pred2 %>% 
+  filter(genre == "jazz" & .pred_class == "country") %>%
   kable("html") %>% 
   kable_styling("striped")
 ```
 
-Okazuje się, że jest to "Pneuma" zespołu Tool. Również i tutaj po zastanowieniu można zrozumieć pomyłkę. Jest to utwór długi, z małą ilością wokali i o stale zmieniającym się metrum muzycznym, co można przypisać niejednemu utworowi klasycznemu.
+{{< https://www.youtube.com/watch?v=NHN6-yWFKPc >}}
+
+Po jego wysłuchaniu również można zrozumieć pomyłkę. Jest to zdecydowanie utwór jazzowy, jednak brzmi on też jednocześnie trochę jak "piosenka z westernu".
+
+Są tu też obecne pomyłki, dla których nie ma żadnego logicznego wyjaśnienia, jak sklasyfikowanie utworu Linkin Park "What I've Done" jako country, czy kompozycji Vivaldi'ego jako reggae.
+
+### Wykresy krzywych ROC
 
 ```{r}
 #| label: fig-roc
@@ -1454,7 +1474,7 @@ rf_wflow2 %>%
   theme(plot.title = element_text(hjust = 0.5))
 ```
 
-Z krzywych ROC stworzonych za pomocą metody one vs. all dla każdego gatunku można znaleźć potwierdzenie tego, co można było zobaczyć już na macierzy konfucji - model najlepiej radził sobie z przewidywaniem metalu i hiphopu, natomiast najgorzej radził sobie z klasyfikacją bluesa, rocka i country.
+Z krzywych ROC stworzonych za pomocą metody one vs. all dla każdego gatunku można znaleźć potwierdzenie tego, co można było zobaczyć już na macierzy konfuzji - model najlepiej radził sobie z przewidywaniem metalu i hiphopu, natomiast najgorzej radził sobie z klasyfikacją bluesa, rocka i country.
 
 ## Istotność cech w modelu
 
@@ -1486,4 +1506,12 @@ f_imp2 + labs(title = "Model2") +
   theme(plot.title = element_text(hjust = 0.5))
 ```
 
-Z powyższego wykresu można zauważyć, że najważniejszą cechą przy podziałach stosowanych w tworzeniu optymalnego modelu lasu losowego było `energy`, `danceability` oraz `danceability`. Najmniej przydały się natomiast zmienne `key`, `mode` oraz `time_signature`, co nie jest zaskoczeniem, ponieważ gatunki nigdy nie ogarniczają się do konkretnych skal ani struktur.
+Z powyższego wykresu można zauważyć, że najważniejszą cechą przy podziałach stosowanych w tworzeniu optymalnego modelu lasu losowego `Model1` było `energy`, `danceability` oraz `danceability`. W `Modelu2` najważniejsza jest natomiast `decade`, a w drugiej kolejności `acousticness`, które na podstawie wysokiej korelacji zostało usunięte w pierwszym modelu. Widać więc, że korelację tą należało w tym przypadku zignorować, ponieważ nie dość że model `Model2` charakteryzował się lepszą dokładnością, to okazuje się, że wysoko skorelowana z inną zmienna `acousticness` w znacznym stopniu przyczyniła się do tworzenia podziałów w lasie losowym, który okazał się najlepszym modelem.
+
+W obu przypadkach najmniej przydały się natomiast zmienne `key`, `mode` oraz `time_signature`, co nie jest zaskoczeniem, ponieważ gatunki nigdy nie ogarniczają się do konkretnych skal ani struktur.
+
+Z powyższego wykresu można wyciągnąć jeszcze jeden ważny wniosek: ponieważ dekada okazuje się istotną zmienną, można przypuszczać, że stworzone modele nie sprawdziłyby się dobrze w klasyfikacji utworów spoza zbioru, na podstawie którego został zbudowany. Utwory w zbiorze nie były bowiem wybierane losowo – sam dobierałem playlisty, z których pochodzą. Często ograniczały się one do konkretnych dekad, o czym świadczą ich nazwy, takie jak "10s Metal Classics". W związku z tym nie można zakładać, że ilość utworów z danego gatunku w zbiorze jest reprezentatywna dla całego gatunku. Z tego powodu model prawdopodobnie nie byłby równie skuteczny, gdyby został przetestowany na zupełnie innym zbiorze testowym, ponieważ zmyliłyby go daty wydania, do których nie mógłby odnieść zasad, które tak dobrze działały w kontekście utworów z mojego zbioru.
+
+# Podsumowanie
+
+W ramach projektu dokonałem skutecznej klasyfikacji gatunków muzycznych na podstawie metadanych z serwisu Spotify. Proces rozpoczął się od pobrania danych przez API serwisu Spotify, które następnie poddałem eksploracyjnej analizie w celu zidentyfikowania kluczowych cech wpływających na klasyfikację. Dane zostały odpowiednio przygotowane, a następnie na ich podstawie zbudowałem i przetestowałem różne modele uczenia maszynowego. Najlepszy model osiągnął dokładność 87.1% na zbiorze testowym. Projekt potwierdził, że metadane Spotify mogą efektywnie wspierać klasyfikację gatunków muzycznych, jednak najprawdopodobniej nie będą one aż tak skuteczne w przewidywaniu gatunków utworów spoza zbioru, który stworzyłem. Można jednak mieć nadzieję, że przy pobraniu dużo większej ilości danych w sposób bardziej losowy, można by było stworzyć model, który dawałby znacznie lepsze rezultaty na nieznanych obserwacjach.
