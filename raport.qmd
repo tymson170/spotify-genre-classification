@@ -175,7 +175,7 @@ df <- file %>%
 Zestaw cech po wstępnej selekcji wyglądał zatem następująco
 
 | Cecha                      | Opis                                                                                                                   |
-|-------------------|-----------------------------------------------------|
+|--------------------|----------------------------------------------------|
 | `playlist_name`            | Nazwa playlisty, z której pochodzi utwór                                                                               |
 | `danceability`             | "Taneczność" utworu - zmienna ciągła przyjmująca wartości w przedziale \[0, 1\]                                        |
 | `energy`                   | Energiczność utworu - zmienna ciągła przyjmująca wartości w przedziale \[0, 1\]                                        |
@@ -1518,3 +1518,9 @@ Z powyższego wykresu można wyciągnąć jeszcze jeden ważny wniosek: poniewa�
 # Podsumowanie
 
 W ramach projektu dokonałem skutecznej klasyfikacji gatunków muzycznych na podstawie metadanych z serwisu Spotify. Proces rozpoczął się od pobrania danych przez API serwisu Spotify, które następnie poddałem eksploracyjnej analizie w celu zidentyfikowania kluczowych cech wpływających na klasyfikację. Dane zostały odpowiednio przygotowane, a następnie na ich podstawie zbudowałem i przetestowałem różne modele uczenia maszynowego. Najlepszy model osiągnął dokładność 87.1% na zbiorze testowym. Projekt potwierdził, że metadane Spotify mogą efektywnie wspierać klasyfikację gatunków muzycznych, jednak najprawdopodobniej nie będą one aż tak skuteczne w przewidywaniu gatunków utworów spoza zbioru, który stworzyłem. Można jednak mieć nadzieję, że przy pobraniu dużo większej ilości danych w sposób bardziej losowy, można by było stworzyć model, który dawałby znacznie lepsze rezultaty na nieznanych obserwacjach.
+
+### Żródła
+
+-   <https://www.blisshq.com/music-library-management-blog/2011/01/25/fundamental-music-genre-list/>
+
+-   <https://developer.spotify.com/documentation/web-api/reference/get-audio-features>
