@@ -177,7 +177,7 @@ df <- df[,-which(sapply(df, class) == "list")]
 The dataset originally contains many unnecessary variables, such as the identifier of the playlist from which a given track originates or a link to the cover of each song.
 
 ```{r echo=FALSE}
-file <- read.csv("spotify-genres-classification-new.csv")
+file <- read.csv("data/spotify-genres-classification-new.csv")
 kable(head(file), "html") %>% kable_styling("striped") %>% scroll_box(width = "100%")
 ```
 
@@ -1067,7 +1067,7 @@ registerDoSEQ()
 
 ```{r echo=FALSE}
 # saveRDS(grid_results, "grid_results_tune_changed_ts.rds")
-grid_results <- readRDS("grid_results_tune_changed_ts.rds")
+grid_results <- readRDS("data/grid_results_tune_changed_ts.rds")
 ```
 
 Using the same steps, I will also find the best parameters for the dataset in which I did not remove the `loudness` and `acousticness` variables. The data split into training and test sets will be the same, so it will be possible to see where the models differed.
@@ -1140,7 +1140,7 @@ registerDoSEQ()
 
 ```{r echo=FALSE}
 # saveRDS(grid_results2, "grid_results_tune_wla.rds")
-grid_results2 <- readRDS("grid_results_tune_wla.rds")
+grid_results2 <- readRDS("data/grid_results_tune_wla.rds")
 ```
 
 ## Tuning Results
