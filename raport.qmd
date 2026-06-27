@@ -1,9 +1,13 @@
 ---
-title: "Klasyfikacja gatunku za pomocą metadanych Spotify"
+title: "Genre Classification using Spotify Metadata"
 author: "Tymoteusz Romanowicz"
 format: 
   html: 
+    theme: flatly
     toc: true
+    toc-depth: 3
+    code-fold: true
+    code-summary: "Display code"
     include-after-body:
       file: toc.html
 editor: visual
@@ -11,7 +15,7 @@ editor_options:
   chunk_output_type: console
 execute: 
   warning: false
-code-fold: show
+  message: false
 code-tools: true
 embed-resources: true
 ---
@@ -44,25 +48,52 @@ library(htmlTable)
 library(shapr)
 library(vip)
 library(spotifyr)
+library(DT)
 ```
 
-# Wstęp
+```{r}
+theme_set(
+  theme_minimal(base_family = "sans", base_size = 12) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5, size = 14),
+    plot.subtitle = element_text(hjust = 0.5, color = "gray40"),
+    panel.grid.minor = element_blank(),
+    legend.position = "bottom"
+  )
+)
+```
 
-Spotify to szwedzki serwis strumieniowy oferujący dostęp do ponad **100 milionów utworów** oraz **6 milionów podcastów**. Posiada on oficjalne API, które umożliwia pobieranie metadanych opisujących treści portalu i tworzenie na ich podstawie aplikacji komunikujących się z portalem, takich jak system rekomendacji. Zmienne opisujące utwory muzyczne, które można wyodrębnić za jego pomocą, to między innymi energiczność, taneczność, czy tempo utworu, co pozwala pomyśleć, że można za ich pomocą sklasyfikować piosenkę do konkretnego gatunku. Żeby spróbować tego dokonać, postanowiłem podjąć próbę budowy optymalnego modelu klasyfikacji wieloklasowej, który na podstawie pozyskanych metadanych będzie przyporządkowywał utworowi jeden z gatunków muzycznych.
+# Introduction
 
-# Sposób pozyskania danych
+Spotify is a Swedish streaming service offering access to over **100 million tracks** and **6 million podcasts**. It has an official API that allows downloading metadata describing the portal's content and creating applications that communicate with the portal based on it, such as a recommendation system. Variables describing musical tracks that can be extracted using it include the track's energy, danceability, or tempo, which suggests that they can be used to classify a song into a specific genre. To attempt this, I decided to try building an optimal multi-class classification model that will assign a musical genre to a track based on the extracted metadata.
 
-## Wybór klas zmiennej zależnej
+```{mermaid}
+%%| code-fold: false
+flowchart LR
+  A[(Spotify API)] --> B(EDA)
+  B --> C{Data Split}
+  C -->|Train 80%| D(Recipes / Preprocessing)
+  C -->|Test 20%| E(Testing)
+  D --> F(Grid Search / Tuning)
+  F --> G[Best Model]
+  G --> H(Evaluation)
+  E --> H
+```
 
-Na świecie istnieje szeroka gama gatunków muzycznych: od *mongolskich śpiewów gardłowych*, przez *catstep* aż po *pirate metal*. W swoim projekcie musiałem się jednak ograniczyć do zaledwie kilku, fundamentalnych gatunków, które dobrze uogólniałyby tę różnorodność.
 
-[![Źródło: https://everynoise.com/](images/enao.png){alt="Źródło: https://everynoise.com/" fig-align="center"}](https://everynoise.com/)
+# Data Acquisition
 
-Serwis **FreeDB** jest darmową bazą danych niegdyś służącą osobom wypalającym płyty CD do wstępnego uzupełniania informacji o utworach. Opisuje ona każdą znajdującą się tam piosenkę za pomocą jednego z następujących gatunków: blues, muzyka klasyczna, country, folk, jazz, newage, reggae, rock, soundtrack. Uznałem, że jest to całkiem kompletna lista podstawowych gatunków muzycznych. Pozwoliłem sobie jednak zamienić *soundtrack* i *newage* na *hip-hop* i *metal*, a następnie na jej podstawie określiłem stany, które będzie przyjmowała zmienna zależna w moim modelu. Ostatecznie więc, lista stanów, które będzie mogła przyjąć zmienna określająca gatunek, wygląda następująco:
+## Choosing the Dependent Variable Classes
+
+There is a wide range of musical genres in the world: from *Mongolian throat singing*, through *catstep*, to *pirate metal*. In my project, however, I had to limit myself to just a few fundamental genres that would generalize this diversity well.
+
+[![Source: https://everynoise.com/](images/enao.png){alt="Source: https://everynoise.com/" fig-align="center"}](https://everynoise.com/)
+
+The **FreeDB** service is a free database that was once used by people burning CDs to pre-fill track information. It describes every song located there using one of the following genres: blues, classical, country, folk, jazz, newage, reggae, rock, soundtrack. I decided that this is a fairly complete list of basic musical genres. However, I took the liberty of replacing *soundtrack* and *newage* with *hip-hop* and *metal*, and then based on it, I defined the states that the dependent variable will take in my model. Ultimately, the list of states that the variable determining the genre can take looks as follows:
 
 -   blues,
 
--   muzyka klasyczna,
+-   classical,
 
 -   country,
 
@@ -78,9 +109,9 @@ Serwis **FreeDB** jest darmową bazą danych niegdyś służącą osobom wypalaj
 
 -   metal.
 
-## Stworzenie zbioru danych za pomocą API
+## Creating the Dataset Using the API
 
-API Spotify umożliwia jednoczesne pobranie danych dla wszystkich utworów z wybranego albumu, profilu artysty lub playlisty. W celu stworzenia zbioru danych wyszukałem więc w serwisie po kilka playlist zawierających utwory danego gatunku tak, żeby na jeden gatunek przypadało 200-300 obserwacji i zbiór był możliwie zrównoważony, a następnie wyniki złączyłem w jedną ramkę danych.
+The Spotify API allows for the simultaneous downloading of data for all tracks from a selected album, artist profile, or playlist. In order to create a dataset, I searched the service for several playlists containing tracks of a given genre so that there were 200-300 observations per genre and the dataset was as balanced as possible, and then I joined the results into one dataframe.
 
 ```{r eval=FALSE}
 playlist_names <- c(
@@ -139,18 +170,18 @@ df <- df[,-which(sapply(df, class) == "list")]
 # write.csv(df, "spotify-genres-classification-new.csv")
 ```
 
-# Przetwarzanie i czyszczenie zbioru
+# Dataset Processing and Cleaning
 
-## Wstępna selekcja cech
+## Initial Feature Selection
 
-Zbiór pierwotnie zawiera wiele niepotrzebnych zmiennych, takich jak identyfikator playlisty, z której pochodzi dany utwór czy link do okładki każdej piosenki.
+The dataset originally contains many unnecessary variables, such as the identifier of the playlist from which a given track originates or a link to the cover of each song.
 
 ```{r echo=FALSE}
 file <- read.csv("spotify-genres-classification-new.csv")
 kable(head(file), "html") %>% kable_styling("striped") %>% scroll_box(width = "100%")
 ```
 
-Należy się ich natychmiast pozbyć, aby zwiększyć przejrzystość zbioru oraz ułatwić dalszą analizę.
+They should be disposed of immediately to increase the transparency of the dataset and facilitate further analysis.
 
 ```{r echo=FALSE}
 print_oneperline <- function(x) {
@@ -168,48 +199,48 @@ df <- file %>%
 # print_oneperline(colnames(df))
 ```
 
-Zestaw cech po wstępnej selekcji wyglądał zatem następująco
+The feature set after initial selection thus looked as follows:
 
-| Cecha                      | Opis                                                                                                                   |
-|---------------------|---------------------------------------------------|
-| `playlist_name`            | Nazwa playlisty, z której pochodzi utwór                                                                               |
-| `danceability`             | "Taneczność" utworu - zmienna ciągła przyjmująca wartości w przedziale \[0, 1\]                                        |
-| `energy`                   | Energiczność utworu - zmienna ciągła przyjmująca wartości w przedziale \[0, 1\]                                        |
-| `key`                      | Skala utworu - zmienna kategoryczna, której wartości odpowiadają notacji z <https://en.wikipedia.org/wiki/Pitch_class> |
-| `loudness`                 | Głośność utworu w decybelach - zmienna ciągła przyjmująca wartości ujemne                                              |
-| `mode`                     | Zmienna kategoryczna przyjmująca wartość 1 jeśli utwór jest w skali molowej i 0 jeśli utwór jest w skali durowej       |
-| `speechiness`              | "Recytowalność" tekstu utworu - zmienna ciągła przyjmująca wartości w przedziale \[0, 1\]                              |
-| `acousticness`             | Określa szansę na to, że utwór jest akustyczny - zmienna ciągła przyjmująca wartości w przedziale \[0, 1\]             |
-| `instrumentalness`         | Określa szansę na to, że utwór nie zawiera wokalu - zmienna ciągła przyjmująca wartości w przedziale \[0, 1\]          |
-| `liveness`                 | Określa szansę na to, że utwór był wykonywany na żywo - zmienna ciągła przyjmująca wartości w przedziale \[0, 1\]      |
-| `valence`                  | Określa jak bardzo pozytywnie jest nastrojony utwór - zmienna ciągła przyjmująca wartości w przedziale \[0, 1\]        |
-| `tempo`                    | Zmienna ciągła określająca tempo piosenki w bpm (*beats per minute*)                                                   |
-| `time_signature`           | Zmienna kategoryczna określająca metrum muzyczne, gdzie np. wartość 3 oznacza metrum 3/4                               |
-| `track.explicit`           | Zmienna kategoryczna przyjmująca wartość TRUE dla utworów z treściami wulgarnymi i FALSE dla pozostałych               |
-| `track.duration_ms`        | Zmienna ciągła określająca długość trwania utworu w milisekundach                                                      |
-| `track_name`               | Identyfikator określający nazwę utworu                                                                                 |
-| `track_popularity`         | Popularność utworu - zmienna ciągła przyjmująca wartości w przedziale \[0, 100\]                                       |
-| `track.album.release_date` | Data wydania utworu                                                                                                    |
-| `key_name`                 | Zmienna kategoryczna określająca skalę, w jakiej jest utwór                                                            |
-| `mode`                     | Zmienna kategoryczna określająca skalę, przyjmująca wartość `minor` lub `major`                                        |
-| `key_mode`                 | Połączenie zmiennej `key_name` i `key_mode`                                                                            |
+| Feature | Description |
+|-----------------------|------------------------------------------------|
+| `playlist_name` | Name of the playlist the track comes from |
+| `danceability` | Track's "danceability" - continuous variable taking values in the range \[0, 1\] |
+| `energy` | Track's energy - continuous variable taking values in the range \[0, 1\] |
+| `key` | Track's key - categorical variable whose values correspond to notation from <https://en.wikipedia.org/wiki/Pitch_class> |
+| `loudness` | Track's loudness in decibels - continuous variable taking negative values |
+| `mode` | Categorical variable taking the value 1 if the track is in a minor key and 0 if the track is in a major key |
+| `speechiness` | "Speechiness" of the track's lyrics - continuous variable taking values in the range \[0, 1\] |
+| `acousticness` | Determines the probability that the track is acoustic - continuous variable taking values in the range \[0, 1\] |
+| `instrumentalness` | Determines the probability that the track contains no vocals - continuous variable taking values in the range \[0, 1\] |
+| `liveness` |  |
+| `valence` | Determines how positively the track is tuned - continuous variable taking values in the range \[0, 1\] |
+| `tempo` | Continuous variable determining the song's tempo in bpm (*beats per minute*) |
+| `time_signature` | Categorical variable determining the musical meter, where e.g., the value 3 means a 3/4 meter |
+| `track.explicit` | Categorical variable taking the value TRUE for tracks with explicit content and FALSE for others |
+| `track.duration_ms` | Continuous variable determining the track's duration in milliseconds |
+| `track_name` | Identifier determining the track's name |
+| `track_popularity` | Track's popularity - continuous variable taking values in the range \[0, 100\] |
+| `track.album.release_date` | Track's release date |
+| `key_name` | Categorical variable determining the key the track is in |
+| `mode` | Categorical variable determining the key, taking the value `minor` or `major` |
+| `key_mode` | Combination of the `key_name` and `key_mode` variables |
 
-: Opis zestawu cech
+: Feature set description
 
 ::: callout-note
-Celowo zostawiłem zmienną `track_name` będącą identyfikatorem w celu ułatwienia pracy ze zbiorem oraz interpretacji wyników.
+I intentionally kept the `track_name` variable acting as an identifier to facilitate working with the dataset and interpreting the results.
 :::
 
-Patrząc na powyższy zestaw cech od razu można zauważyć, że zmienna `mode_name` jest nadmiarowa w stosunku do zmiennej `mode`, `key_name` jest nadmiarowa w stosunku do `key`, a `key_mode` będąca kombinacją poprzednich zmiennych również jest zbyteczna, od razu więc się ich pozbywam.
+Looking at the above feature set, one can immediately notice that the `mode_name` variable is redundant with respect to the `mode` variable, `key_name` is redundant with respect to `key`, and `key_mode` being a combination of the previous variables is also superfluous, so I am getting rid of them right away.
 
 ```{r}
 df <- df %>%
   select(-c(key_mode, key_name, mode_name))
 ```
 
-## Utworzenie zmiennej zależnej określającej gatunek utworu
+## Creating the Dependent Variable Determining the Track Genre
 
-Zmienna określająca gatunek nie była częścią zbioru cech pozyskanych bezpośrednio z API, dlatego muszę ją stworzyć samodzielnie korzystając ze zmiennej określającej nazwę playlisty, z której pochodzi utwór.
+The variable determining the genre was not part of the feature set extracted directly from the API, so I have to create it myself using the variable determining the name of the playlist from which the track originates.
 
 ```{r echo=FALSE}
 kable(table(df$playlist_name), "html", col.names = c("Variable", "Frequency")) %>%   kable_styling("striped") %>% 
@@ -243,21 +274,21 @@ df <- df %>%
   filter(genre != "NA")
 ```
 
-Liczba utworów przynależących do poszczególnych gatunków prezentuje się następująco. Widać, że zgodnie z zamierzeniem każdy gatunek posiada 200-300 obserwacji, dzięki czemu zbiór jest w miarę zbilansowany.
+The number of tracks belonging to individual genres presents itself as follows. It can be seen that, as intended, each genre has 200-300 observations, thanks to which the dataset is fairly balanced.
 
 ```{r echo=FALSE}
 kable(table(df$genre), "html", col.names = c("Variable", "Frequency")) %>% 
   kable_styling("striped")
 ```
 
-Zmienna `genre` określająca gatunek jest już utworzona, więc mogę się pozbyć cechy `playlist_name`.
+The `genre` variable determining the genre has already been created, so I can get rid of the `playlist_name` feature.
 
 ```{r}
 df <- df %>% 
   select(-playlist_name)
 ```
 
-## Sprawdzenie obecności wartości brakujących
+## Checking for Missing Values
 
 ```{r}
 any(is.na(df))
@@ -267,16 +298,16 @@ any(is.na(df))
 kable(df[!complete.cases(df), ], "html") %>% kable_styling("striped")
 ```
 
-Wygląda na to, że zbiór posiada wartości brakujące. Po ich wyświetleniu okazuje się jednak, że stanowi je pojedynczy wiersz, w którym wartości każdej zmiennej z wyjątkiem `genre` to NA. Jest to prawdopodobnie spowodowane tym, że API pobrało z playlisty muzyki klasycznej utwór, który nie jest już dostępny w serwisie. Z racji tego, że jest to jedyny wiersz z wybrakowanymi wartościami w całym zbiorze, śmiało można się go pozbyć bez konieczności imputacji danych.
+It looks like the dataset has missing values. After displaying them, however, it turns out that they constitute a single row in which the values of every variable except `genre` are NA. This is probably due to the API downloading a track from a classical music playlist that is no longer available on the service. Given that this is the only row with missing values in the entire dataset, it can safely be disposed of without the need for data imputation.
 
 ```{r}
 df <- na.omit(df)
 any(is.na(df))
 ```
 
-## Sprawdzenie obecności duplikatów
+## Checking for Duplicates
 
-Na obserwacje z poszczególnych gatunków przeważnie składają się utwory z kilku różnych playlist. Nie jest jednak wykluczone, że w kilku playlistach dla jednego gatunku pewna piosenka się powtórzyła. Należy więc wybadać, czy taka sytuacja wystąpiła i mamy do czynienia z duplikatami.
+Observations from individual genres are mostly made up of tracks from several different playlists. However, it is not excluded that in a few playlists for a single genre, a certain song was repeated. It should therefore be investigated whether such a situation occurred and we are dealing with duplicates.
 
 ```{r echo=FALSE}
 duplicated(df$track.name) %>% 
@@ -285,14 +316,14 @@ duplicated(df$track.name) %>%
   kable_styling("striped")
 ```
 
-Okazuje się, że w naszym zbiorze powtórzyły się aż 162 utwory. Należy usunąć ich powtórzenia, aby wyeliminować problem identycznych obserwacji.
+It turns out that as many as 162 tracks were repeated in our dataset. Their repetitions should be removed to eliminate the problem of identical observations.
 
 ```{r}
 df <- df %>% 
   distinct(track.name, .keep_all = TRUE)
 ```
 
-Po zostawieniu w zbiorze wierszy o unikalnych tytułach problem zostaje rozwiązany.
+After leaving rows with unique titles in the dataset, the problem is resolved.
 
 ```{r echo=FALSE}
 duplicated(df$track.name) %>% 
@@ -301,7 +332,7 @@ duplicated(df$track.name) %>%
   kable_styling("striped") 
 ```
 
-## Weryfikacja poprawności danych
+## Data Validity Verification
 
 ```{r echo=FALSE}
 devtools::source_gist('4a0a5ab9fe7e1cf3be0e')
@@ -312,7 +343,7 @@ strtable(df) %>%
   scroll_box(height = "500px")
 ```
 
-Wyświetlenie typu i przykładowych obserwacji dla każdej zmiennej od razu pozwala nam zauważyć parę problemów ze zbiorem, którymi trzeba będzie się zająć. Są to między innymi niepoprawne typy danych lub to, że zmienna przedstawiająca datę, w której opublikowany został utwór, czasami jest wyrażona w dokładności co do nia, a czasami co do roku wydania.
+Displaying the type and sample observations for each variable immediately allows us to notice a few problems with the dataset that will have to be addressed. These include, among others, incorrect data types or the fact that the variable representing the date on which the track was published is sometimes expressed with accuracy to the day, and sometimes to the release year.
 
 ```{r echo=FALSE}
 funs <- lst(min, median, mean, max, sd)
@@ -327,9 +358,9 @@ t(map_dfr(funs,
   kable_styling("striped")
 ```
 
-Statystyki opisowe dla zmiennych ciągłych również obrazują kilka anomalii w naszym zbiorze. Widać na przykład, że istnieje utwór z tempem równym 0, co jest niemożliwe. Istnieją również obserwacje o zerowej popularności, co jest mało prawdopodobne biorąc pod uwagę to, że praktycznie każda playlista, z której zostały pobrane dane, zawierała klasyki gatunku.
+Descriptive statistics for continuous variables also illustrate several anomalies in our dataset. It can be seen, for example, that there is a track with a tempo equal to 0, which is impossible. There are also observations with zero popularity, which is highly unlikely considering that practically every playlist from which data was downloaded contained genre classics.
 
-### Usunięcie wiersza z zerowym tempem
+### Removing the Row with Zero Tempo
 
 ```{r}
 #| code-fold: true
@@ -337,22 +368,22 @@ Statystyki opisowe dla zmiennych ciągłych również obrazują kilka anomalii w
 df[df$tempo < 40, ] %>% kable("html") %>% kable_styling("striped")
 ```
 
-Po wyświetleniu wszystkich wierszy, które mają tempo poniżej 40 bpm okazuje się, że jest tylko jeden taki utwór. Można go więc usunąć bez obawy, że spowoduje to wielką różnicę w zbiorze.
+After displaying all rows that have a tempo below 40 bpm, it turns out that there is only one such track. It can therefore be removed without fear that it will cause a huge difference in the dataset.
 
 ```{r}
 df <- df %>% 
   filter(tempo != 0)
 ```
 
-### Rezygnacja ze zmiennej `popularity`
+### Abandoning the `popularity` Variable
 
 ```{r}
 #| code-fold: true
 
-ggplot(df, aes(x = track.popularity)) + geom_histogram(bins = 30, fill = "#F8766D") + labs(title = "Histogram zmiennej `popularity`")
+ggplot(df, aes(x = track.popularity)) + geom_histogram(bins = 30, fill = "#F8766D") + labs(title = "Histogram of `popularity` variable")
 ```
 
-Wyświetlenie histogramu zmiennej `popularity` pozwala zauważyć, że mamy bardzo dużo zmiennych o popularności równej lub bliskiej 0. Sprawdźmy, ile wierszy ma "zerową" popularność.
+Displaying the histogram of the `popularity` variable allows one to notice that we have a lot of variables with popularity equal or close to 0. Let's check how many rows have "zero" popularity.
 
 ```{r}
 nrow(df[df$track.popularity == 0, ])
@@ -362,14 +393,14 @@ nrow(df[df$track.popularity == 0, ])
 tail(df[df$track.popularity == 0, ]$track.name, 10)
 ```
 
-Mamy aż 245 takich wierszy. Można więc wywnioskować, że zmienna ta nie jest definiowana przez serwis Spotify w prawidłowy sposób i zawiera nieprawdopodobne wartości, co potwierdza fakt, że utwór Slayera "Repentless" również ma "zerową" popularność. Sprawiło to, że skłoniłem się do wyeliminowania jej ze zbioru danych.
+We have as many as 245 such rows. It can therefore be concluded that this variable is not defined by the Spotify service in a correct way and contains improbable values, which is confirmed by the fact that Slayer's track "Repentless" also has "zero" popularity. This prompted me to eliminate it from the dataset.
 
 ```{r}
 df <- df %>% 
   select(-track.popularity)
 ```
 
-### Zmiana wartości w zmiennej `time_signature`
+### Changing Values in the `time_signature` Column
 
 ```{r echo=FALSE}
 table(df$time_signature) %>% 
@@ -377,17 +408,17 @@ table(df$time_signature) %>%
   kable_styling("striped")
 ```
 
-Po wyświetleniu liczby utworów w poszczególnym metrum okazuje się, że zbiór jest zdominowany przez utwory w najpopularniejszym metrum, jakim jest 4/4. Podejrzane jest jednak to, że mamy 18 utworów w metrum 1/4, co najprawdopodobniej jest błędem. Przyjrzyjmy się utworom w tym metrum, żeby zidentyfikować źródło takiego kodowania.
+After displaying the number of tracks in particular meters, it turns out that the dataset is dominated by tracks in the most popular meter, which is 4/4. However, it is suspicious that we have 18 tracks in a 1/4 meter, which is most likely an error. Let's look at the tracks in this meter to identify the source of such coding.
 
 ```{r}
 tail(df[df$time_signature == 1, ]$track.name)
 ```
 
-Okazuje się, że metrum to jest przypisane albo utworom, które posiadają "płynną" strukturę, charakterystyczną dla muzyki klasycznej, albo tym, które cechuje niestabilne metrum, czyli takie, które często zmienia się w trakcie trwania utworu. Dobrym przykładem jest utwór "Money" zespołu Pink Floyd, (motyw główny jest w 7/4, ale potem podczas "mostku" przechodzi w 4/4, a następnie 6/4, żeby potem znowu wrócić do 7/4), lub utwór "Pneuma" zespołu Tool, gdzie metrum zmienia się praktycznie cały czas (posiada on nawet powtarzający się segment, w którym mamy do czynienia z następującymi po sobie taktami w metrum 33/16, 33/16, 28/16 i 30/16!).
+It turns out that this meter is assigned either to tracks that have a "fluid" structure, characteristic of classical music, or those that are characterized by an unstable meter, meaning one that frequently changes during the course of the track. A good example is the track "Money" by the band Pink Floyd (the main motif is in 7/4, but then during the "bridge" it transitions to 4/4, and then 6/4, to later return to 7/4 again), or the track "Pneuma" by the band Tool, where the meter changes practically all the time (it even has a repeating segment in which we are dealing with consecutive measures in the meters 33/16, 33/16, 28/16, and 30/16!).
 
 {{< video https://www.youtube.com/watch?v=5ClCaPmAA7s >}}
 
-Nic więc dziwnego, że API przy wyodrębnianiu metrum z tych piosenek "zwariowało" i sklasyfikowało je jako 1/4, co oznaczałoby mniej więcej, że na cały takt przypada jedno uderzenie, co oczywiście jest w tym przypadku nieprawdą. Z racji tego, że utwory w metrum 3/4 i 5/4, zarówno jak "utwory w metrum 1/4" występują stosunkowo rzadko, postanowiłem złączyć je w jedną kategorię "other", natomiast utwory w metrum 4/4 pozostawić niezmienione.
+So it is no wonder that the API, when extracting the meter from these songs, "went crazy" and classified them as 1/4, which would roughly mean that there is one beat per entire measure, which is of course untrue in this case. Given that tracks in 3/4 and 5/4 meters, as well as "tracks in 1/4 meter", occur relatively rarely, I decided to merge them into one "other" category, while leaving tracks in 4/4 meter unchanged.
 
 ```{r echo}
 df$time_signature <- as.character(df$time_signature)
@@ -396,7 +427,7 @@ df$time_signature <- ifelse(df$time_signature == "4",
                             "other")
 ```
 
-Tak prezentuje się teraz podział utworów ze względu na obecność metrum 4/4 lub innego.
+This is how the division of tracks due to the presence of a 4/4 meter or another presents itself now.
 
 ```{r echo=FALSE}
 table(df$time_signature) %>% 
@@ -404,9 +435,9 @@ table(df$time_signature) %>%
   kable_styling("striped")
 ```
 
-### Zmiana zmiennej `track.album.release_date` na zmienną `decade`
+### Changing the `track.album.release_date` Variable to the `decade` Variable
 
-Z poprzednich wnioskowań wyniknęło, że zmienna przedstawiająca datę wydania utworu jest wyrażana z różną dokładnością, ponieważ czasem mamy w niej podaną całą datę, a czasami tylko rok. W celu ujednolicenia dokładności wartości tej cechy zdecydowałem się z każdej daty wyciągnąć tylko rok. Następnie uznałem, że dobrym pomysłem byłoby przypisanie każdego roku do poszczególnej dekady, w celu skategoryzowania zmiennej. Piosenek z lat 30', 40', 50' i 60' było mało, więc zgrupowałem je do jednej kategorii "other", żeby grupy były bardziej zbilansowane.
+From previous deductions, it resulted that the variable representing the release date of the track is expressed with varying accuracy, because sometimes we have the full date given in it, and sometimes only the year. In order to unify the accuracy of the value of this feature, I decided to extract only the year from each date. Then I decided that it would be a good idea to assign each year to a particular decade in order to categorize the variable. There were few songs from the 30s, 40s, 50s, and 60s, so I grouped them into one "other" category (or `<70`), to make the groups more balanced.
 
 ```{r}
 df$track.album.release_date <- substr(df$track.album.release_date, 1, 4)
@@ -422,7 +453,7 @@ df <- df %>%
   select(-release_year)
 ```
 
-W ten sposób utworzyłem kategoryczną zmienną `decade`, która przyjmuję następujące wartości z daną częstotliwością:
+In this way, I created the categorical variable `decade`, which takes the following values with a given frequency:
 
 ```{r echo=FALSE}
 table(df$decade) %>% 
@@ -430,15 +461,15 @@ table(df$decade) %>%
   kable_styling("striped")
 ```
 
-### Zmiana wartości w kolumnie `track.explicit` na 0 i 1
+### Changing Values in the `track.explicit` Column to 0 and 1
 
-Zmienna `track.explicit` przyjmuje wartości logiczne TRUE lub FALSE, dlatego decyduję się je zamienić na wartości 1 i 0, gdzie 1 odpowiada utworowi, który zawiera treści wulgarne.
+The `track.explicit` variable takes boolean values TRUE or FALSE, so I decide to change them to values 1 and 0, where 1 corresponds to a track that contains explicit content.
 
 ```{r}
 df$track.explicit <- ifelse(df$track.explicit == TRUE, 1, 0)
 ```
 
-Rozkład tej cechy przedstawia się następująco:
+The distribution of this feature presents itself as follows:
 
 ```{r echo=FALSE}
 table(df$track.explicit) %>% 
@@ -446,9 +477,9 @@ table(df$track.explicit) %>%
   kable_styling("striped")
 ```
 
-### Kodowanie zmiennych kategorycznych
+### Coding Categorical Variables
 
-Zmienne, które przyjmują ograniczoną liczbę wartości, odpowiednio zakodowałem jako zmienne kategoryczne.
+Variables that take a limited number of values were appropriately coded as categorical variables.
 
 ```{r}
 df$genre <- factor(df$genre)
@@ -458,9 +489,9 @@ df$time_signature <- factor(df$time_signature)
 df$track.explicit <- factor(df$track.explicit)
 ```
 
-### Zmiana jednostki w zmiennej `track.duration_ms` na sekundy
+### Changing the Unit in the `track.duration_ms` Variable to Seconds
 
-Zmienna `track.duration_ms` jest wyrażana w milisekundach, przez co przyjmuje bardzo duże wartości. W celu ułatwienia interpretacji tej cechy zamienię jednostkę na sekundy dzieląc jej wartości przez 1000.
+The `track.duration_ms` variable is expressed in milliseconds, thus taking very large values. To facilitate the interpretation of this feature, I will change the unit to seconds by dividing its values by 1000.
 
 ```{r}
 df$track.duration_s <- df$track.duration_ms / 1000
@@ -468,7 +499,7 @@ df <- df %>%
   select(-track.duration_ms)
 ```
 
-## Efekt przetwarzania i czyszczenia zbioru
+## Effect of Dataset Processing and Cleaning
 
 ```{r echo=FALSE}
 devtools::source_gist('4a0a5ab9fe7e1cf3be0e')
@@ -479,7 +510,7 @@ strtable(df) %>%
   scroll_box(height = "500px")
 ```
 
-Widać, że wszystkie zmienne mają teraz poprawnie zakodowane typy.
+It can be seen that all variables now have correctly encoded types.
 
 ```{r echo=FALSE}
 funs <- lst(min, median, mean, max, sd)
@@ -492,93 +523,93 @@ t(map_dfr(funs,
   kable_styling("striped")
 ```
 
-Statystyki opisowe również nie wykazują żadnych nieprawidłowości w zbiorze.
+Descriptive statistics also show no irregularities in the dataset.
 
-# Wizualizacja zależności pomiędzy zmiennymi
+# Visualizing Relationships Between Variables
 
-## Rozkłady zmiennych
+## Distributions of Variables
+
+::::: panel-tabset
+#### Categorical Variables
 
 ::: panel-tabset
-#### Zmienne kategoryczne
-
-::: panel-tabset
-##### Gatunek
+##### Genre
 
 ```{r echo=FALSE}
 ggplot(df, aes(x = genre)) + geom_bar(fill = "#F8766D")
 ```
 
-##### Skale
+##### Keys
 
 ```{r echo=FALSE}
 ggplot(df, aes(x = key, fill = mode)) + geom_bar()
 ```
 
-##### Metrum
+##### Meter
 
 ```{r echo=FALSE}
 ggplot(df, aes(x = time_signature, fill = genre)) + geom_bar()
 ```
 
-##### Wulgarność
+##### Explicitness
 
 ```{r echo=FALSE}
 ggplot(df, aes(x = track.explicit, fill = genre)) + geom_bar()
 ```
 
-##### Dekada
+##### Decade
 
 ```{r echo=FALSE}
 ggplot(df, aes(x = decade, fill = genre)) + geom_bar()
 ```
 :::
 
-#### Zmienne ciągłe
+#### Continuous Variables
 
 ::: panel-tabset
-##### Taneczność
+##### Danceability
 
 ```{r echo=FALSE}
 ggplot(df, aes(x = danceability)) + geom_histogram(bins = 30, fill = "#F8766D")
 ```
 
-##### Energiczność
+##### Energy
 
 ```{r echo=FALSE}
 ggplot(df, aes(x = energy)) + geom_histogram(bins = 30, fill = "#F8766D")
 ```
 
-##### Głośność
+##### Loudness
 
 ```{r echo=FALSE}
 ggplot(df, aes(x = loudness)) + geom_histogram(bins = 30, fill = "#F8766D")
 ```
 
-##### Recytowalność
+##### Speechiness
 
 ```{r echo=FALSE}
 ggplot(df, aes(x = speechiness)) + geom_histogram(bins = 30, fill = "#F8766D")
 ```
 
-##### Akustyczność
+##### Acousticness
 
 ```{r echo=FALSE}
 ggplot(df, aes(x = acousticness)) + geom_histogram(bins = 30, fill = "#F8766D")
 ```
 
-##### Instrumentalność
+##### Instrumentalness
 
 ```{r echo=FALSE}
 ggplot(df, aes(x = instrumentalness)) + geom_histogram(bins = 30, fill = "#F8766D")
 ```
 
-##### Wersja na żywo
+##### Liveness
 
 ```{r echo=FALSE}
 ggplot(df, aes(x = liveness)) + geom_histogram(bins = 30, fill = "#F8766D")
 ```
 
-##### Pozytywność nastroju
+##### Valence
 
 ```{r echo=FALSE}
 ggplot(df, aes(x = valence)) + geom_histogram(bins = 30, fill = "#F8766D")
@@ -590,19 +621,19 @@ ggplot(df, aes(x = valence)) + geom_histogram(bins = 30, fill = "#F8766D")
 ggplot(df, aes(x = tempo)) + geom_histogram(bins = 30, fill = "#F8766D")
 ```
 
-##### Długość trwania
+##### Duration
 
 ```{r echo=FALSE}
 ggplot(df, aes(x = track.duration_s)) + geom_histogram(bins = 30, fill = "#F8766D")
 ```
 :::
-:::
+:::::
 
 ::: callout-important
-Wyraźnie widać, że część zmiennych ciągłych ma rozkłady asymetryczne gruboogonowe. Oznacza to, że niektóre modele uczenia maszynowego będą wymagały uprzedniej transformacji tych zmiennych w celu wymuszenia większej symetryczności rozkładów.
+It is clearly visible that some continuous variables have heavy-tailed asymmetrical distributions. This means that some machine learning models will require prior transformation of these variables to force greater symmetry of the distributions.
 :::
 
-### Rozkłady dekad w zależności od gatunku
+### Decade Distributions Depending on Genre
 
 ```{r echo=FALSE}
 genres <- unique(df$genre)
@@ -612,61 +643,61 @@ genres <- unique(df$genre)
 ##### Blues
 
 ```{r echo=FALSE}
-ggplot(df[df$genre == genres[1], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[1], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
+ggplot(df[df$genre == genres[1], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[1], " in decades"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
 ```
 
-##### Muzyka klasyczna
+##### Classical
 
 ```{r echo=FALSE}
-ggplot(df[df$genre == genres[2], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[2], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
+ggplot(df[df$genre == genres[2], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[2], " in decades"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
 ```
 
 ##### Country
 
 ```{r echo=FALSE}
-ggplot(df[df$genre == genres[3], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[3], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
+ggplot(df[df$genre == genres[3], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[3], " in decades"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
 ```
 
 ##### Folk
 
 ```{r echo=FALSE}
-ggplot(df[df$genre == genres[4], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[4], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
+ggplot(df[df$genre == genres[4], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[4], " in decades"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
 ```
 
 ##### Jazz
 
 ```{r echo=FALSE}
-ggplot(df[df$genre == genres[5], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[5], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
+ggplot(df[df$genre == genres[5], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[5], " in decades"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
 ```
 
 ##### Hiphop
 
 ```{r echo=FALSE}
-ggplot(df[df$genre == genres[6], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[6], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
+ggplot(df[df$genre == genres[6], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[6], " in decades"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
 ```
 
 ##### Reggae
 
 ```{r echo=FALSE}
-ggplot(df[df$genre == genres[7], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[7], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
+ggplot(df[df$genre == genres[7], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[7], " in decades"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
 ```
 
 ##### Rock
 
 ```{r echo=FALSE}
-ggplot(df[df$genre == genres[8], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[8], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
+ggplot(df[df$genre == genres[8], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[8], " in decades"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
 ```
 
 ##### Metal
 
 ```{r echo=FALSE}
-ggplot(df[df$genre == genres[9], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[9], " w dekadach"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
+ggplot(df[df$genre == genres[9], ], aes(x = decade)) + geom_bar(fill = "#F8766D") + labs(title = str_to_sentence(paste0(genres[9], " in decades"))) + theme(plot.title = element_text(hjust = 0.5, size = 25))
 ```
 :::
 
-Można tu zauważyć kilka ciekawych faktów. Utwory bluesowe i jazzowe w zdecydowanej większości powstały dawniej niż w latach 70', z kolei najwięcej utworów klasycznych w zbiorze pochodzi z lat 20'. Innym ciekawym spostrzeżeniem jest to, że prawie wszystkie piosenki folkowe pochodzą z lat 20' -jedynie garstka z nich pochodzi jeszcze z lat 10'. Warto zaznaczyć, że rozkłady te nie odzwierciedlają jednak faktycznego procesu popularyzacji tych gatunków - odzwierciedlają one jedynie charakterystykę zbioru.
+Here you can notice a few interesting facts. Blues and jazz tracks were overwhelmingly created earlier than the 70s, while most classical tracks in the dataset come from the 20s. Another interesting observation is that almost all folk songs come from the 20s—only a handful of them date back to the 10s. It is worth noting that these distributions do not, however, reflect the actual process of popularization of these genres - they merely reflect the characteristics of the dataset.
 
-## Treści wulgarne w zależności od gatunku
+## Explicit Content Depending on Genre
 
 ```{r echo=FALSE}
 df %>% 
@@ -676,28 +707,28 @@ df %>%
   mutate(all = c(187, 226, 238, 248, 235, 247)) %>% 
   ggplot(aes(x = reorder(genre, -n), y = n)) + geom_bar(stat = "identity", fill = "#F8766D") + xlab("genre") + ylab("count") + 
 geom_text(aes(label = paste0(round(n/all*100, 2), "%")), position = position_dodge(width = 0.9), vjust = -0.25) + 
-labs(caption = "Wartości na słupkach oznaczają stosunek utworów wulgarnych do wszystkich utworów w danym gatunku") + theme(plot.caption = element_text(hjust = 0))
+labs(caption = "Values on the bars represent the ratio of explicit tracks to all tracks in a given genre") + theme(plot.caption = element_text(hjust = 0))
 ```
 
-Nie jest zaskoczeniem fakt, że najwięcej utworów zawierających treści wulgarne pochodzi z gatunku hip-hop (zawiera je aż prawie 90% utworów z tego gatunku). Kolejny w kolejność jest metal, ponad 1/5 gatunków z tego utworu zawiera treści nieodpowiednie dla młodych odbiorców. Jedynymi gatunkami, w których nie ma żadnych wulgaryzmów są blues, muzyka klasyczna i jazz.
+It is no surprise that the most tracks containing explicit content come from the hip-hop genre (almost 90% of tracks from this genre contain them). Next in line is metal, over 1/5 of the tracks from this genre contain content inappropriate for young audiences. The only genres in which there are no profanities are blues, classical music, and jazz.
 
-## Energiczność vs. głośność utworów
+## Energy vs. Loudness of Tracks
 
 ```{r echo=FALSE}
 ggplot(df, aes(x = energy, y = loudness, colour = genre)) + geom_point()
 ```
 
-Energiczność i głośność utworu to cechy, które z pozoru wydają się być powiązane. Powyższy wykres dowodzi, że rzeczywiście występuje taka zależność: im utwór jest bardziej energiczny, tym głośniejszy. Dodatkowo można zauważyć, że niektóre gatunki układają się w "chmury" - utwory metalowe są na przykład ściśle skupione w prawym górnym rogu wykresu, co oznacza że są jednocześnie najgłośniejsze i najbardziej energiczne.
+Track energy and loudness are features that seemingly appear to be related. The chart above proves that such a relationship indeed exists: the more energetic the track, the louder it is. Additionally, one can notice that some genres form "clouds"—metal tracks, for example, are tightly clustered in the upper right corner of the chart, meaning they are simultaneously the loudest and most energetic.
 
-## Taneczność vs. pozytywność utworów
+## Danceability vs. Positivity of Tracks
 
 ```{r echo=FALSE}
 ggplot(df, aes(x = danceability, y = valence, colour = genre)) + geom_point()
 ```
 
-Czy to, że utwór jest bardziej pozytywny oznacza, że nadaje się również bardziej do tańczenia? Powyższy wykres pokazuje, że jest w tym trochę prawdy.Można zauważywć, że najbardziej tanecznym i pozytywnym gatunkiem jest reggae. Może natomiast dziwić fakt, iż wygląda na to, że wiele utworów klasycznych ze zbioru nie nadaje się do tańca i jest wyjątkowo depresyjna.
+Does a more positive track mean it's also more suitable for dancing? The chart above shows there is some truth to this. One can notice that the most danceable and positive genre is reggae. It may be surprising, however, that it looks like many classical pieces from the dataset are not suitable for dancing and are exceptionally depressing.
 
-## Głośność utworów na przestrzeni lat
+## Loudness of Tracks Over the Years
 
 ```{r echo=FALSE}
 df %>% 
@@ -708,15 +739,15 @@ df %>%
   add_lines(hovertemplate = paste0("Average loudness: %{hovertext}"))
 ```
 
-Ciekawym faktem jest to, że w więkoszści gatunków utwory stawały się głośniejsze z dekady na dekadę. Nie jest zaskoczeniem, że metal prawie zawsze był najgłośniejszym gatunkiem, w tym latach 20' charakteryzował się średnią głośnością na poziomie -3.23 dB, co znacznie kontrastuje z -23.68 dB w przypadku muzyki klasycznej z tej samej dekady.
+An interesting fact is that in most genres, tracks became louder from decade to decade. It is not a surprise that metal was almost always the loudest genre; in the 20s, it was characterized by an average loudness of -3.23 dB, which starkly contrasts with -23.68 dB for classical music from the same decade.
 
-## Rozkłady czasu trwania utworów
+## Distributions of Track Duration
 
 ```{r echo=FALSE}
 ggplot(df, aes(y = track.duration_s, x = genre, fill = genre)) + geom_boxplot() + theme(legend.position = "") + ylab("Track length")
 ```
 
-Patrząc na wykresy pudełkowe długości piosenek w zależności od gatunku można podejrzewać, że jest szansa na to, że niektóre rozkłady są do siebie zbliżone. Żeby sprawdzić to sprawdzić zamierzam przeprowadzić test ANOVA. Najpierw sprawdzam jednak wymagane założenia o wielowymiarowej normalności w grupach, zbalansowaniu grup i ich homogeniczności.
+Looking at the box plots of song lengths depending on the genre, one can suspect that there is a chance some distributions are similar to each other. To verify this, I intend to perform an ANOVA test. First, however, I check the required assumptions of multivariate normality in groups, group balancing, and their homogeneity.
 
 ```{r echo=FALSE}
 df %>%
@@ -730,13 +761,13 @@ summarise(sample_size=length(track.duration_s), p_value=shapiro.test(track.durat
 bartlett.test(df$track.duration_s, df$genre)
 ```
 
-Wygląda na to, że żadne z założeń nie jest spełnione, zatem przeprowadzę test Kruskala-Wallisa będący parametrycznym odpowiednikiem testu ANOVA.
+It looks like none of the assumptions are met, so I will perform the Kruskal-Wallis test, which is the non-parametric equivalent of the ANOVA test.
 
 ```{r}
 kruskal.test(track.duration_s ~ genre, df)
 ```
 
-Test ten wykazał, że należy odrzucić hipotezę mówiącą o tym, że średnie długości piosenek w gatunkach są na takim samym poziomie. Żeby sprawdzić, które z nich się różnią pomiędzy sobą, przeprowadzę test Dunna.
+This test showed that the hypothesis stating that the mean song lengths in genres are at the same level should be rejected. To see which ones differ from each other, I will perform Dunn's test.
 
 ```{r}
 dunntest <- dunn_test(df, track.duration_s ~ genre, p.adjust.method = "bonferroni")
@@ -747,31 +778,31 @@ dunntest <- dunntest %>% add_xy_position(x = "genre")
 ggboxplot(df, x = "genre", y = "track.duration_s", fill = "genre", legend = "") + stat_pvalue_manual(dunntest, hide.ns = TRUE, label = "{round(p.adj, 2)}") 
 ```
 
-Na wykresie pokazane są tylko wartości p-value, które były istotne statystycznie. Okazuje się więc, że przypuszczenia były niesłuszne - w każdym przypadku należy odrzucić hipotezę, że średnia długość utworów jest taka sama.
+The chart only shows p-values that were statistically significant. It turns out that the assumptions were incorrect - in every case, the hypothesis that the average track length is the same must be rejected.
 
-## Zależność zmiennej `valence` od skali
+## Dependence of the `valence` Variable on Key
 
-W praktyce, skale molowe i oparte na nich utwory muzyczne uważa się za mające smutne brzmienie, w odróżnieniu od skal durowych, które uważa się za radosne.
+In practice, minor scales and pieces based on them are considered to have a sad sound, as opposed to major scales, which are considered happy.
 
 ```{r echo=FALSE}
 ggplot(df, aes(x = mode, y = valence)) + geom_boxplot()
 ```
 
-Patrząc na wykresy pudełkowe wygląda na to, że zmienna `valence` nie zależy od tego, czy utwór jest w skali durowej czy molowej. Potwierdzenie otrzymamy przeprowadzając test t-Studenta wcześniej sprawdzając założenie o jednorodności wariancji.
+Looking at the box plots, it seems that the `valence` variable does not depend on whether the track is in a major or minor key. We will receive confirmation by performing a Student's t-test, having previously checked the assumption of variance homogeneity.
 
 ```{r}
 var.test(df[df$mode == 0, ]$valence, df[df$mode == 1, ]$valence)
 ```
 
-Założenie o jednorodności wariancji jest spełnione. Przeprowadzę zatem t-test.
+The assumption of variance homogeneity is met. I will therefore perform the t-test.
 
 ```{r}
 t.test(valence ~ mode, data = df)
 ```
 
-P-wartość przeprowadzonego testu wskazuje na to, że nie ma podstaw do odrzucenia hipotezy o równości średnich w tych rozkładach. Oznacza to, że w naszym zbiorze cecha mówiąca o nastroju utworu nie zależy od skali, co jest dosyć ciekawym wnioskiem.
+The p-value of the performed test indicates that there is no basis for rejecting the hypothesis of equal means in these distributions. This means that in our dataset, the feature referring to the track's mood does not depend on the scale, which is a fairly interesting conclusion.
 
-## Korelacja pomiędzy zmiennymi niezależnymi ciągłymi
+## Correlation Between Continuous Independent Variables
 
 ```{r echo=FALSE}
 df %>% 
@@ -780,7 +811,7 @@ df %>%
   corPlot(cex = 0.5, xlas = 2)
 ```
 
-Wysoka korelacja między zmiennymi zależnymi może stanowić problem podczas budowy modelu uczenia maszynowego. Wiele źródeł podaje, że można ją uznać za wysoką, jeżeli przekracza wartość 0.7. W naszym zbiorze wartość ta jest przekraczana trzy razy, pomiędzy parami zmiennych:
+High correlation between independent variables can pose a problem during the construction of a machine learning model. Many sources state that it can be considered high if it exceeds the value of 0.7. In our dataset, this value is exceeded three times, between pairs of variables:
 
 -   energy-loudness,
 
@@ -808,7 +839,7 @@ ggplot(df, aes(x = acousticness, y = loudness)) + geom_point() + geom_smooth(met
 ```
 :::
 
-Na wykresach pomiędzy tymi zmiennymi widoczne są odkryte zależności, szczególnie w przypadku energiczności i głośności, gdzie obserwacje dosyć wyraźnie układają się wzdłuż krzywej dopasowanej wielomianem drugiego stopnia.
+The charts between these variables show uncovered relationships, especially in the case of energy and loudness, where the observations quite clearly align along a curve fitted with a second-degree polynomial.
 
 ```{r echo=FALSE}
 fig <- plot_ly(df, x = ~energy, y = ~loudness, z = ~acousticness, color = ~genre)
@@ -819,9 +850,9 @@ fig <- fig %>% layout(scene = list(xaxis = list(title = 'energy'),
 fig
 ```
 
-Na wykresie trójwymiarowym widać jak bardzo te trzy cechy zależą od siebie nawzajem.
+The three-dimensional chart shows how much these three features depend on each other.
 
-Żeby sprawdzić, czy możliwe będzie zastąpienie tych trzech zmiennych tylko jedną z nich, przeprowadzę PCA w celu sprowadzenia trzech wymiarów do jednego, a następnie sprawdzę, która z tych zmiennych ma największy wpływ na kształtowanie tego wymiaru.
+To check if it will be possible to replace these three variables with just one of them, I will perform PCA to reduce three dimensions to one, and then check which of these variables has the greatest impact on shaping this dimension.
 
 ```{r echo=FALSE}
 library(factoextra)
@@ -835,13 +866,13 @@ pca <- prcomp(enloac,
 fviz_eig(pca)
 ```
 
-Z powyższego wykresu widać, że pierwszy wymiar wyjaśnia aż około 80% zmienności.
+From the chart above, it can be seen that the first dimension explains up to approximately 80% of the variance.
 
 ```{r echo=FALSE}
 fviz_contrib(pca, choice = "var", axes = 1)
 ```
 
-Wykres wkładu zmiennych w pierwszy wymiar oraz linia odcięcia sugerują, że zmienna `energy` ma istotnie największy wpływ w tworzenie się tego wymiaru. Na tej podstawie decyduję się więc na to, żeby z trójki zmiennych `energy`, `acousticness` i `loudness` zostawić tylko `energy`, co wyeliminuje problem wysokiej korelacji pomiędzy częścią zmiennych zależnych w zbiorze. Później sprawdzę też jednak jak będzie się spisywał model zbudowany na zbiorze z usuniętymi zmiennymi. "Wysoka korelacja" jest bowiem płynnym określeniem - niektóre źródła podają, że zaczyna się ona już od wartości 0.7, natomiast czasami o wysokiej korelacji mówi się dopiero od 0.9. Jest zatem szansa, że korelacja, która tu wystąpiła, nie miała wpływu na przyszłą skuteczność predykcyjną modelu.
+The variable contribution chart for the first dimension and the cutoff line suggest that the `energy` variable has the most significant impact on creating this dimension. On this basis, I therefore decide to leave only `energy` from the trio of variables `energy`, `acousticness`, and `loudness`, which will eliminate the problem of high correlation between some of the dependent variables in the dataset. Later on, however, I will also check how a model built on the dataset with the removed variables will perform. "High correlation" is indeed a fluid term - some sources say it starts at 0.7, while sometimes high correlation is spoken of only from 0.9. So there is a chance that the correlation that occurred here had no impact on the future predictive efficacy of the model.
 
 ```{r}
 df2 <- df
@@ -850,13 +881,13 @@ df <- df %>%
   select(-c(loudness, acousticness))
 ```
 
-# Przygotowanie modelu klasyfikacji wieloklasowej
+# Preparing the Multi-class Classification Model
 
-Zbiór nie zawiera już braków danych ani duplikatów, wyselekcjonowane zmienne są poprawnie zakodowane i nie zawierają nieprawidłowości, a problem wysokiej korelacji został wyeliminowany, dlatego można przejść do przygotowywania modelu przewidującego gatunek muzyczny.
+The dataset no longer contains missing data or duplicates, the selected variables are correctly encoded and contain no irregularities, and the problem of high correlation has been eliminated, so we can move on to preparing the model predicting the musical genre.
 
-## Podział zbioru na treningowy i testowy
+## Splitting the Dataset into Training and Test Sets
 
-Zbiór dzielę na treningowy i testowy w proporcjach 0.8 ustawiając parametr `strata` o wartości "genre", aby proporcje liczebności grup zmiennej objaśnianej były zachowane.
+I split the dataset into training and test sets in a 0.8 proportion, setting the `strata` parameter to the value "genre", so that the proportions of the dependent variable's group sizes are preserved.
 
 ```{r}
 set.seed(170)
@@ -867,16 +898,16 @@ spotify_test <- testing(split)
 split
 ```
 
-## Przygotowanie 10-krotnej walidacji krzyżowej
+## Preparing 10-fold Cross-validation
 
 ```{r}
 spotify_folds <- vfold_cv(spotify_train, strata = genre)
 spotify_folds
 ```
 
-## Przygotowanie odpowiednich receptur
+## Preparing Appropriate Recipes
 
-W poniższej tabeli przedstawione są modele, których zamierzam użyć do budowy modeli predykcyjnych na podstawie mojego zbioru, a także rodzaj preprocessingu, który jest dla nich rekomendowany.
+The table below presents the models I intend to use to build predictive models based on my dataset, as well as the type of preprocessing that is recommended for them.
 
 | Model         | Dummy vars | Zero-variance | Decorrelate | Normalize | Transform |
 |---------------|------------|---------------|-------------|-----------|-----------|
@@ -888,29 +919,29 @@ W poniższej tabeli przedstawione są modele, których zamierzam użyć do budow
 | Svm           | ✓          | ✓             | ✓           | ✓         | ✓         |
 | Naive Bayes   | ✗          | ✓             | ◌           | ✗         | ✗         |
 
-Rodzaje preprocessingu:
+Preprocessing types:
 
--   dummy vars - przekształcenie zmiennych kategorycznych w tzw. dummy variables
+-   dummy vars - converting categorical variables into so-called dummy variables
 
--   zero-variance - usunięcie zmiennych, które zawierają tylko pojedynczą wartość
+-   zero-variance - removing variables that contain only a single value
 
--   decorrelate - wyeliminowanie problemu wysokiej korelacji pomiędzy zmiennymi objaśniającymi
+-   decorrelate - eliminating the problem of high correlation between explanatory variables
 
--   normalize - normalizacja
+-   normalize - normalization
 
--   transform - wymuszenie większej symetryczności rozkładu asymetrczynych zmiennych
+-   transform - forcing greater distribution symmetry of asymmetric variables
 
-✓ oznacza, że dany rodzaj preprocessingu jest rekomendowany, ✗ - przeciwnie, natomiast ◌ oznacza, że dany zabieg może, ale nie musi pomóc w osiągnięciu lepszych wyników.
+✓ means that a given type of preprocessing is recommended, ✗ - the opposite, whereas ◌ means that a given procedure may, but does not have to, help in achieving better results.
 
-Zbiór po uprzednich zabiegach nie posiada już problemu wysokiej korelacji, więc nie wymaga dalszej "dekorelacji". Nie zawiera on także zmiennych zawierających pojedynczą wartość, jednak zawrę ten element preprocessingu w recepturach na wszelki wypadek.
+The dataset after prior procedures no longer has a high correlation problem, so it does not require further "decorrelation". It also does not contain variables comprising a single value, but I will include this preprocessing element in the recipes just in case.
 
-Na podstawie tabelki tworzę trzy receptury:
+Based on the table, I create three recipes:
 
--   `basic_recipe` określa predyktory i zmienną objaśnianą w modelu, nadaje zmiennej `track_name` inną rolę, żeby nie mogła być używana przy trenowaniu modelu, a także usuwane są potencjalne zmienne przyjmujące pojedynczą wartość,
+-   `basic_recipe` specifies the predictors and the explained variable in the model, gives the `track_name` variable a different role so it cannot be used in training the model, and potential variables taking a single value are removed,
 
--   `dummy_recipe` dodatkowo zamienia zmienne kategoryczne na dummy variables,
+-   `dummy_recipe` additionally converts categorical variables into dummy variables,
 
--   `transform_recipe` dodatkowo transformuje zmienne numeryczne za pomocą transformacji Yeo-Johnsona i je normalizuje.
+-   `transform_recipe` additionally transforms numeric variables using the Yeo-Johnson transformation and normalizes them.
 
 ```{r}
 basic_recipe <-
@@ -943,7 +974,7 @@ summary(transform_recipe %>% prep(spotify_train)) %>%
   scroll_box(height = "500px")
 ```
 
-## Zdefiniowanie modeli i przygotowanie ich parametrów do tuningu
+## Defining Models and Preparing Their Parameters for Tuning
 
 ```{r}
 rf_spec <- rand_forest(mtry = tune(), min_n = tune(), trees = tune()) %>% 
@@ -976,7 +1007,7 @@ bayes_spec <- naive_Bayes(smoothness = tune(), Laplace = tune()) %>%
   set_mode("classification")
 ```
 
-## Przypisanie modeli do odpowiednich przepływów pracy
+## Assigning Models to Appropriate Workflows
 
 ```{r}
 basic <- workflow_set(preproc = list(basic = basic_recipe), 
@@ -1006,9 +1037,9 @@ all_workflows <- bind_rows(basic, dummy, transform) %>%
 all_workflows
 ```
 
-## Tuning hiperparametrów modeli
+## Tuning Model Hyperparameters
 
-Przy poszukiwaniu najlepszego modelu o najlepszych parametrach będę posługiwał się następującymi metrykami: accuracy, bal_accuracy, precision, recall, sensitivity oraz specificity.
+I will use the following metrics when searching for the best model with the best parameters: accuracy, bal_accuracy, precision, recall, sensitivity, and specificity.
 
 ```{r}
 grid_ctrl <- 
@@ -1039,7 +1070,7 @@ registerDoSEQ()
 grid_results <- readRDS("grid_results_tune_changed_ts.rds")
 ```
 
-Za pomocą tych samych kroków znajdę również najlepsze parametry dla zbioru, w którym nie usunąłem zmiennych `loudness` i `acousticness`. Podział danych na zbiór treningowy i testowy będzie taki sam, dzięki czemu będzie można zobaczyć gdzie modele się różniły.
+Using the same steps, I will also find the best parameters for the dataset in which I did not remove the `loudness` and `acousticness` variables. The data split into training and test sets will be the same, so it will be possible to see where the models differed.
 
 ```{r}
 #| code-fold: true
@@ -1112,11 +1143,11 @@ registerDoSEQ()
 grid_results2 <- readRDS("grid_results_tune_wla.rds")
 ```
 
-## Wyniki tuningu
+## Tuning Results
 
-::: columns
+::::: columns
 ::: column
-**Zbiór bez `loudness` i `acousticness`**
+**Dataset without `loudness` and \`acousticness**
 
 ```{r echo=FALSE}
 grid_results %>% 
@@ -1127,7 +1158,7 @@ grid_results %>%
 :::
 
 ::: column
-**Zbiór z tymi zmiennymi**
+**Dataset with these variables**
 
 ```{r echo=FALSE}
 grid_results2 %>% 
@@ -1136,13 +1167,13 @@ grid_results2 %>%
   head()
 ```
 :::
-:::
+:::::
 
-Wygląda na to, że według każdej metryki model lasu losowego okazuje się być najlepszy. Dodatkowo wygląda na to, że model zbudowany na podstawie zbioru ze zmiennymi `loudness` i `acousticness` jest minimalnie lepszy.
+It looks like, according to every metric, the random forest model turns out to be the best. Additionally, it looks like the model built on the dataset with the `loudness` and `acousticness` variables is marginally better.
 
-::: columns
+::::: columns
 ::: column
-**Zbiór bez `loudness` i `acousticness`**
+**Dataset without `loudness` and \`acousticness**
 
 ```{r echo=FALSE}
 grid_results %>% 
@@ -1154,7 +1185,7 @@ grid_results %>%
 :::
 
 ::: column
-**Zbiór z tymi zmiennymi**
+**Dataset with these variables**
 
 ```{r echo=FALSE}
 grid_results2 %>% 
@@ -1164,9 +1195,9 @@ grid_results2 %>%
   head() 
 ```
 :::
-:::
+:::::
 
-Po przyjęciu za główną metrykę porównawczą `balanced accuracy` model lasu losowego również zdecydowanie wygląda na najlepszy. Można więc na tym etapie przypuszczać, że wyeliminowanie korelacji nie wpłynęło na poprawę modelu, a nawet nieznacznie ją pogorszyło, co jednak zweryfikuję później ostatecznie sprawdzając dokładność każdego z modeli na zbiorze testowym.
+After adopting `balanced accuracy` as the main comparative metric, the random forest model also definitively looks like the best. Thus, at this stage, it can be assumed that eliminating the correlation did not improve the model, and even slightly worsened it, which I will ultimately verify later by checking the accuracy of each model on the test set.
 
 ```{r echo=FALSE}
 #| layout-ncol: 2
@@ -1180,7 +1211,7 @@ autoplot(
    select_best = TRUE) + 
 geom_text(aes(y = mean - 0.03, label = wflow_id), angle = 90, hjust = 1) +
 lims(y = c(0.6, 0.9)) +
-theme(legend.position = "none") + labs(title = "Zbiór bez `loudness` i `acousticness`")
+theme(legend.position = "none") + labs(title = "Dataset without `loudness` and `acousticness`")
   
 autoplot(
    grid_results2,
@@ -1189,10 +1220,10 @@ autoplot(
    select_best = TRUE) + 
 geom_text(aes(y = mean - 0.03, label = wflow_id), angle = 90, hjust = 1) +
 lims(y = c(0.6, 0.9)) +
-theme(legend.position = "none") + labs(title = "Zbiór z tymi zmiennymi")
+theme(legend.position = "none") + labs(title = "Dataset with these variables")
 ```
 
-::: columns
+::::: columns
 ::: column
 ```{r echo=FALSE}
 grid_results %>% 
@@ -1220,13 +1251,13 @@ grid_results2 %>%
   arrange(-bal_accuracy)
 ```
 :::
-:::
+:::::
 
-Zestawienie najlepszego modelu każdego rodzaju potwierdza, że w naszym zadaniu najlepiej poradziły sobie modele "drzewiaste", najsłabiej natomiast spisał się naiwny klasyfikator bayesowski. Dodatkowo wyraźnie widać, że zostawienie usuniętych wcześniej zmiennych poprawiło średnią dokładność każdego z modeli. Kolejność modeli w zależności od użytego zbioru od najdokładniejszego do najmniej dokładnego również jest podobna - jedynie model svm okazał się minimalnie lepszy i wyprzedził model mlp w przypadku modeli zbudowanych za pomocą zbioru z większą ilością zmiennych.
+The comparison of the best model of each type confirms that in our task, "tree-based" models performed best, whereas the naive Bayes classifier performed the poorest. Additionally, it is clearly visible that keeping the previously removed variables improved the average accuracy of each model. The order of models depending on the dataset used, from most accurate to least accurate, is also similar - only the SVM model turned out to be marginally better and overtook the MLP model in the case of models built using the dataset with more variables.
 
-## Stworzenie najlepszych modeli o parametrach wybranych przez przeszukiwanie siatki
+## Creating the Best Models with Parameters Selected by Grid Search
 
-Ostatecznie decyduję się na stworzenie dwóch modeli lasu losowego dla każdego zbioru, ponieważ w każdym zestawieniu radził on sobie najlepiej. Jako `model1` będę od teraz oznaczał model bez dodatkowych zmiennych, drugi natomiast będzie oznaczany jako `model2`.
+Ultimately, I decide to create two random forest models for each dataset, because it performed best in every comparison. I will from now on designate the model without additional variables as `Model1`, while the second one will be designated as `Model2`.
 
 ```{r}
 best_results <- 
@@ -1240,7 +1271,7 @@ best_results2 <-
   select_best(metric = "bal_accuracy")
 ```
 
-::: columns
+::::: columns
 ::: column
 **Model1**
 
@@ -1258,9 +1289,9 @@ best_results2 %>%
   select(mtry, trees, min_n)
 ```
 :::
-:::
+:::::
 
-Model lasu losowego wybrane metodą przeszukiwania siatki mają kolejno parametry:
+The random forest models selected by grid search have the following parameters, respectively:
 
 -   `mtry` = 3,
 
@@ -1268,7 +1299,7 @@ Model lasu losowego wybrane metodą przeszukiwania siatki mają kolejno parametr
 
 -   `min_n` = 5
 
-dla `Model1` oraz
+for `Model1` and
 
 -   `mtry` = 6,
 
@@ -1276,7 +1307,7 @@ dla `Model1` oraz
 
 -   `min_n` = 5
 
-dla `Model2`.
+for `Model2`.
 
 ```{r}
 best_model_random_forest <- rand_forest(trees = best_results$trees,
@@ -1292,9 +1323,9 @@ best_model_random_forest2 <- rand_forest(trees = best_results2$trees,
   set_mode("classification")
 ```
 
-## Sprawdzenie dokładności modelu na zbiorze testowym
+## Checking Model Accuracy on the Test Set
 
-Ostatecznie o tym, który model spisuje się dokładniej i jaka jest faktyczna zdolność predykcyjna zbudowanych modeli można się przekonać sprawdzając ich zdolności na zbiorze testowym.
+Ultimately, one can find out which model performs more accurately and what the actual predictive capability of the built models is by checking their capabilities on the test set.
 
 ```{r}
 rf_wflow <- 
@@ -1332,7 +1363,7 @@ metrics_test2 <- metrics_set(test_pred2,
                     truth = genre, estimate = .pred_class)
 ```
 
-::: columns
+::::: columns
 ::: column
 **Model1**
 
@@ -1348,11 +1379,11 @@ metrics_test
 metrics_test2
 ```
 :::
-:::
+:::::
 
-Przy porównaniu metryk na zbiorach testowych ostatecznie widać, że `Model2` ma lepsze zdolności generalizacyjne. Wartość metryki `bal_accuracy` wynosząca 0.87 jest zadowalająca i oznacza, że model dobrze radzi sobie na danych, których wcześniej nie widział. Różnica między metrykami obydwu modeli nie jest bardzo duża, jednak z pewnością będzie zauważalna na macierzy klasyfikacji.
+When comparing metrics on the test sets, it is ultimately apparent that `Model2` has better generalization capabilities. A `bal_accuracy` metric value of 0.87 is satisfactory and means the model handles data it hasn't seen before well. The difference between the metrics of both models is not very large, but it will certainly be noticeable on the classification matrix.
 
-### Macierze klasyfikacji
+### Confusion Matrices
 
 ```{r echo=FALSE}
 #| layout-ncol: 2
@@ -1368,8 +1399,8 @@ ggplot(cfm_df, aes(x = Prediction, y = Truth, fill = Freq)) +
   geom_tile(color = "white") +
   geom_text(aes(label = Freq), vjust = 0.5, color = "white", size = 5) + 
   scale_fill_gradient(low = "lightblue", high = "blue") +  
-  labs(title = "Macierz klasyfikacji Model1", x = "Wartość przewidywana",
-       y = "Wartość prawdziwa") +
+  labs(title = "Confusion Matrix Model1", x = "Predicted Value",
+       y = "True Value") +
   theme_minimal() +
   theme(axis.text = element_text(size = 12),
         axis.title = element_text(size = 14),
@@ -1385,25 +1416,25 @@ ggplot(cfm_df2, aes(x = Prediction, y = Truth, fill = Freq)) +
   geom_tile(color = "white") +
   geom_text(aes(label = Freq), vjust = 0.5, color = "white", size = 5) + 
   scale_fill_gradient(low = "lightblue", high = "blue") +  
-  labs(title = "Macierz klasyfikacji Model2", x = "Wartość przewidywana",
-       y = "Wartość prawdziwa") +
+  labs(title = "Confusion Matrix Model2", x = "Predicted Value",
+       y = "True Value") +
   theme_minimal() +
   theme(axis.text = element_text(size = 12),
         axis.title = element_text(size = 14),
         plot.title = element_text(hjust = 0.5))
 ```
 
-Tutaj rzeczywiście rzuca się w oczy poprawa modelu o większej ilości zmiennych. Praktycznie każdy gatunek (z wyjątkiem folku i bluesa) ma teraz więcej poprawnie sklasyfikowanych obserwacji.
+Here the improvement of the model with more variables indeed catches the eye. Practically every genre (except folk and blues) now has more correctly classified observations.
 
-Z powyższych wykresów można wysnuć wiele ciekawych wniosków:
+Many interesting conclusions can be drawn from the charts above:
 
--   każdy model najczęściej, bo aż 10 razy, pomylił blues z jazzem, co jest dosyć zrozumiałym błędem zważając na podobieństwo między tymi gatunkami
+-   each model confused blues with jazz the most often (as many as 10 times), which is a fairly understandable error considering the similarity between these genres
 
--   w `Model2` `country` zostało pomylone z największą ilością gatunku, ponieważ oprócz rzeczywistej wartości model przewidywał w jego przypadku aż 6 innych gatunków muzycznych
+-   in `Model2`, `country` was confused with the largest number of genres, since apart from the actual value, the model predicted up to 6 other musical genres in its case
 
--   hip-hop, jeżeli był mylnie klasyfikowany, to tylko jako reggae.
+-   hip-hop, if it was misclassified, was only classified as reggae.
 
-Dzięki temu, że nie usunąłem ze zbioru zmiennej określającej tytuł piosenki mogę teraz dokładniej przyjrzeć się poszczególnym błędom. Najbardziej przykuł moją uwagę jeden utwór jazzowy, który w `Model1` został pomylony z utworem metalowym.
+Because I didn't remove the variable determining the song title from the dataset, I can now look more closely at individual errors. What caught my attention the most was one jazz track that was confused with a metal track in `Model1`.
 
 ```{r echo=FALSE}
 wrong_pred <- test_pred %>% 
@@ -1424,9 +1455,9 @@ wrong_pred %>%
 
 {{< video https://www.youtube.com/watch?v=dYxgci2uPno >}}
 
-Po jego wysłuchaniu staje się zrozumiałe, dlaczego model pomylił się w tym przypadku. Jest to utwór szybki, agresywny i ponury i mimo że jazzowy, to ma on w sobie elementy metalu. `Model2` nie popełnił już tego błędu; można podejrzewać, że stało się to za sprawą przywrócenia w zbiorze zmiennej `acousticness` - jest ona bowiem cechą, która zdecydowanie różni pomiędzy sobą te gatunki i najprawdopodobniej informacje, które ze sobą wniosła do `Model2` wyeliminowały tę pomyłkę.
+After listening to it, it becomes understandable why the model made a mistake in this case. It is a fast, aggressive, and gloomy track, and although it's jazz, it has elements of metal. `Model2` no longer made this mistake; one can suspect that this happened due to restoring the `acousticness` variable in the dataset - it is a feature that definitely distinguishes these genres from each other, and most likely the information it brought into `Model2` eliminated this confusion.
 
-Inną pomyłką, którą można wziąć pod lupę jest utwór jazz sklasyfikowany jako country w `Model2`.
+Another mistake that can be examined is a jazz track classified as country in `Model2`.
 
 ```{r echo=FALSE}
 wrong_pred2 %>% 
@@ -1437,9 +1468,9 @@ wrong_pred2 %>%
 
 {{< video https://www.youtube.com/watch?v=NHN6-yWFKPc >}}
 
-Po jego wysłuchaniu również można zrozumieć pomyłkę. Jest to zdecydowanie utwór jazzowy, jednak brzmi on też jednocześnie trochę jak "piosenka z westernu".
+After listening to it, the mistake can also be understood. It is definitely a jazz track, but it simultaneously sounds a bit like a "song from a western".
 
-Są tu też obecne pomyłki, dla których nie ma żadnego logicznego wyjaśnienia, jak sklasyfikowanie utworu Linkin Park "What I've Done" jako country, czy kompozycji Vivaldi'ego jako reggae.
+There are also errors present here for which there is no logical explanation, such as classifying Linkin Park's "What I've Done" as country, or Vivaldi's composition as reggae.
 
 ```{r echo=FALSE}
 wrong_pred2 %>% 
@@ -1455,7 +1486,7 @@ wrong_pred2 %>%
   kable_styling("striped")
 ```
 
-### Wykresy krzywych ROC
+### ROC Curve Charts
 
 ```{r}
 #| layout-ncol: 2
@@ -1477,9 +1508,9 @@ rf_wflow2 %>%
   theme(plot.title = element_text(hjust = 0.5))
 ```
 
-Z krzywych ROC stworzonych za pomocą metody one vs. all dla każdego gatunku można znaleźć potwierdzenie tego, co można było zobaczyć już na macierzy konfuzji - model najlepiej radził sobie z przewidywaniem metalu i hiphopu, natomiast najgorzej radził sobie z klasyfikacją bluesa, rocka i country.
+From the ROC curves created using the one vs. all method for each genre, one can find confirmation of what could already be seen on the confusion matrix - the model performed best in predicting metal and hip-hop, while it performed worst in classifying blues, rock, and country.
 
-## Istotność cech w modelu
+## Feature Importance in the Model
 
 ```{r}
 f_imp <- 
@@ -1505,17 +1536,17 @@ f_imp2 + labs(title = "Model2") +
   theme(plot.title = element_text(hjust = 0.5))
 ```
 
-Z powyższego wykresu można zauważyć, że najważniejszą cechą przy podziałach stosowanych w tworzeniu optymalnego modelu lasu losowego `Model1` było `energy`, `danceability` oraz `danceability`. W `Modelu2` najważniejsza jest natomiast `decade`, a w drugiej kolejności `acousticness`, które na podstawie wysokiej korelacji zostało usunięte w pierwszym modelu. Widać więc, że korelację tą należało w tym przypadku zignorować, ponieważ nie dość że model `Model2` charakteryzował się lepszą dokładnością, to okazuje się, że wysoko skorelowana z inną zmienna `acousticness` w znacznym stopniu przyczyniła się do tworzenia podziałów w lasie losowym, który okazał się najlepszym modelem.
+From the chart above, it can be noticed that the most important features in making splits used in creating the optimal random forest `Model1` were `energy`, `danceability`, and `danceability`. In `Model2`, on the other hand, the most important is `decade`, and secondly `acousticness`, which was removed in the first model based on high correlation. It is therefore evident that this correlation should have been ignored in this case, because not only was `Model2` characterized by better accuracy, but it turns out that the `acousticness` variable, highly correlated with another, significantly contributed to creating splits in the random forest that proved to be the best model.
 
-W obu przypadkach najmniej przydały się natomiast zmienne `key`, `mode` oraz `time_signature`, co nie jest zaskoczeniem, ponieważ gatunki nigdy nie ogarniczają się do konkretnych skal ani struktur.
+In both cases, the least useful variables were `key`, `mode`, and `time_signature`, which is not a surprise, since genres are never limited to specific scales or structures.
 
-Z powyższego wykresu można wyciągnąć jeszcze jeden ważny wniosek: ponieważ dekada okazuje się istotną zmienną, można przypuszczać, że stworzone modele nie sprawdziłyby się dobrze w klasyfikacji utworów spoza zbioru, na podstawie którego został zbudowany. Utwory w zbiorze nie były bowiem wybierane losowo – sam dobierałem playlisty, z których pochodzą. Często ograniczały się one do konkretnych dekad, o czym świadczą ich nazwy, takie jak "10s Metal Classics". W związku z tym nie można zakładać, że ilość utworów z danego gatunku w zbiorze jest reprezentatywna dla całego gatunku. Z tego powodu model prawdopodobnie nie byłby równie skuteczny, gdyby został przetestowany na zupełnie innym zbiorze testowym, ponieważ zmyliłyby go daty wydania, do których nie mógłby odnieść zasad, które tak dobrze działały w kontekście utworów z mojego zbioru.
+Another important conclusion can be drawn from the chart above: since decade turns out to be a significant variable, one can assume that the created models would not perform well in classifying tracks outside the dataset on which it was built. The tracks in the dataset were not selected randomly – I personally selected the playlists they come from. They were often limited to specific decades, as evidenced by their names, such as "10s Metal Classics". Consequently, it cannot be assumed that the number of tracks from a given genre in the dataset is representative of the entire genre. For this reason, the model would probably not be as effective if tested on a completely different test dataset, because it would be confused by release dates, to which it could not apply the rules that worked so well in the context of tracks from my dataset.
 
-# Podsumowanie
+# Summary
 
-W ramach projektu dokonałem skutecznej klasyfikacji gatunków muzycznych na podstawie metadanych z serwisu Spotify. Proces rozpoczął się od pobrania danych przez API serwisu Spotify, które następnie poddałem eksploracyjnej analizie w celu zidentyfikowania kluczowych cech wpływających na klasyfikację. Dane zostały odpowiednio przygotowane, a następnie na ich podstawie zbudowałem i przetestowałem różne modele uczenia maszynowego. Najlepszy model osiągnął dokładność 87.1% na zbiorze testowym. Projekt potwierdził, że metadane Spotify mogą efektywnie wspierać klasyfikację gatunków muzycznych, jednak najprawdopodobniej nie będą one aż tak skuteczne w przewidywaniu gatunków utworów spoza zbioru, który stworzyłem. Można jednak mieć nadzieję, że przy pobraniu dużo większej ilości danych w sposób bardziej losowy, można by było stworzyć model, który dawałby znacznie lepsze rezultaty na nieznanych obserwacjach.
+As part of the project, I successfully classified musical genres based on metadata from the Spotify service. The process began with downloading data via the Spotify API, which I then subjected to exploratory analysis to identify key features influencing the classification. The data was appropriately prepared, and then based on it, I built and tested various machine learning models. The best model achieved an accuracy of 87.1% on the test set. The project confirmed that Spotify metadata can effectively support the classification of musical genres, however, they will most likely not be as effective in predicting the genres of tracks outside the dataset I created. One can hope, however, that by downloading a much larger amount of data in a more random manner, it would be possible to create a model that would give significantly better results on unknown observations.
 
-### Żródła
+### Sources
 
 -   <https://www.blisshq.com/music-library-management-blog/2011/01/25/fundamental-music-genre-list/>
 
