@@ -20,9 +20,9 @@ spotify-genre-classification/
 ├── raport.qmd                            # Full analysis (Quarto document)
 ├── raport.html                           # Rendered report
 ├── spotify-genres-classification-new.csv # Raw dataset from API
-├── spotify_dataset.csv                   # Alternative dataset version
-├── grid_results_tune_changed_ts.rds      # Tuning results (reduced feature set)
-├── grid_results_tune_wla.rds             # Tuning results (full feature set)
+├── data/
+│   ├── grid_results_tune_changed_ts.rds  # Tuning results (reduced feature set)
+│   └── grid_results_tune_wla.rds         # Tuning results (full feature set)
 ├── images/
 │   └── enao.png                          # Every Noise at Once genre map
 └── Projekt.Rproj                         # RStudio project file
